@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Viewer</title>
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+    :root { --scale-factor: 1; }
+    .toolbar {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid #eee;
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      gap: 12px;
+    }
+    .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+    #viz_buttons_container { 
+      display: none; 
+      gap: 6px; 
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex: 1;
+      max-width: min(600px, calc(100vw - 500px));
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0,0,0,0.2) transparent;
+      -webkit-overflow-scrolling: touch;
+      padding: 2px 0;
+    }
+    #viz_buttons_container::-webkit-scrollbar {
+      height: 3px;
+    }
+    #viz_buttons_container::-webkit-scrollbar-track {
+      background: transparent;
+      margin: 0 4px;
+    }
+    #viz_buttons_container::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.15);
+      border-radius: 3px;
+    }
+    #viz_buttons_container::-webkit-scrollbar-thumb:hover {
+      background: rgba(0,0,0,0.25);
+    }
+    .toolbar-left { flex: 1; min-width: 0; }
+    .btn { height: 30px; padding: 0 10px; border: 1px solid #e3e6eb; background: #fff; border-radius: 6px; cursor: pointer; white-space: nowrap; font-size: 14px; }
+    .btn.viz-return { background: #e6f4ff; border-color: #91caff; color: #0958d9; }
+    .btn.viz-return:hover { background: #bae0ff; border-color: #69b1ff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.primary { background: #1677ff; border-color: #1677ff; color: #fff; }
+    .btn.loading { position: relative; color: transparent !important; }
+    .btn.loading:after {
+      content: '';
+      position: absolute; inset: 0; margin: auto;
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.6);
+      border-top-color: #fff;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sep { width: 1px; height: 22px; background: #eee; margin: 0 6px; }
+    .page-info { color: #4b5563; font-size: 14px; }
+    .viewer {
+      height: calc(100% - 48px);
+      overflow: auto;
+      background: #f5f6f8;
+    }
+    .page-wrapper { position: relative; display: block; margin: 16px auto; box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: #fff; }
+    .page-canvas { display: block; }
+    /* PDF.js 文本层样式，支持文本选择 */
+    .textLayer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      opacity: 1;
+      line-height: 1.0;
+      user-select: text;
+      -webkit-user-select: text;
+      -moz-user-select: text;
+      cursor: text;
+    }
+    .textLayer span,
+    .textLayer br {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0 0;
+    }
+    .textLayer span::selection {
+      background: rgba(0, 100, 255, 0.3);
+    }
+    .textLayer br::selection {
+      background: transparent;
+    }
+    .textLayer .endOfContent {
+      display: block;
+      position: absolute;
+      left: 0;
+      top: 100%;
+      right: 0;
+      bottom: 0;
+      z-index: -1;
+      cursor: default;
+      user-select: none;
+    }
+    .textLayer .markedContent {
+      display: inline;
+    }
+    .hiddenCanvasElement {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <button id="go_back" class="btn" data-i18n="goBack">返回列表</button>
+      <button id="apply_visualization" class="btn" data-i18n="applyViz">应用可视化</button>
+      <div id="viz_buttons_container" style="display: none;"></div>
+    </div>
+    <div class="toolbar-right">
+      <span class="page-info"><span id="page_num">-</span> / <span id="page_count">-</span></span>
+      <div class="sep"></div>
+      <button id="zoom_out" class="btn" data-i18n="zoomOut">缩小</button>
+      <button id="zoom_in" class="btn" data-i18n="zoomIn">放大</button>
+      <button id="fit_width" class="btn" data-i18n="fitWidth">适配宽度</button>
+      <div class="sep"></div>
+      <button id="download" class="btn" data-i18n="download">下载</button>
+    </div>
+  </div>
+  <div id="viewer" class="viewer"></div>
+  <script type="module">
+    import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
+    import { TextLayer } from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
+    
+    (async function() {
+      // Simple i18n setup using localStorage language
+      const lang = (localStorage.getItem('paper-view-language') || (navigator.language || 'zh')).startsWith('en') ? 'en' : 'zh';
+      document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+      const i18n = {
+        zh: {
+          goBack: '返回列表',
+          applyViz: '应用可视化',
+          zoomIn: '放大',
+          zoomOut: '缩小',
+          fitWidth: '适配宽度',
+          download: '下载',
+          noFile: '未提供文件'
+        },
+        en: {
+          goBack: 'Back',
+          applyViz: 'Apply Visualization',
+          zoomIn: 'Zoom In',
+          zoomOut: 'Zoom Out',
+          fitWidth: 'Fit Width',
+          download: 'Download',
+          noFile: 'No file provided'
+        }
+      };
+      const t = (key) => (i18n[lang] && i18n[lang][key]) || key;
+      // Apply toolbar i18n
+      Array.from(document.querySelectorAll('[data-i18n]')).forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+      });
+
+      const query = new URLSearchParams(location.search);
+      const fileUrl = query.get('file');
+      const fileName = (query.get('name') || '').trim();
+      if (!fileUrl) {
+        document.getElementById('viewer').innerHTML = `<div style="padding:16px;color:#999;">${t('noFile')}</div>`;
+        return;
+      }
+
+      // Setup worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+
+      const viewer = document.getElementById('viewer');
+      const pageNumSpan = document.getElementById('page_num');
+      const pageCountSpan = document.getElementById('page_count');
+      const zoomInBtn = document.getElementById('zoom_in');
+      const zoomOutBtn = document.getElementById('zoom_out');
+      const fitWidthBtn = document.getElementById('fit_width');
+      const downloadBtn = document.getElementById('download');
+      const goBackBtn = document.getElementById('go_back');
+      const applyBtn = document.getElementById('apply_visualization');
+      const vizButtonsContainer = document.getElementById('viz_buttons_container');
+      let scrollTicking = false; // rAF 节流滚动
+      // 初始禁用应用按钮
+      applyBtn.disabled = true;
+
+      goBackBtn.addEventListener('click', () => {
+        try { window.parent.postMessage({ type: 'close-pdf' }, '*'); } catch (e) {}
+      });
+      applyBtn.addEventListener('click', () => {
+        if (applyBtn.disabled) return;
+        // 进入loading
+        applyBtn.classList.add('loading');
+        applyBtn.disabled = true;
+        try { window.parent.postMessage({ type: 'apply-visualization' }, '*'); } catch (e) {}
+      });
+
+      let pdfDoc = null;
+      let currentPage = 1;
+      // 用户缩放比例（相对于"适配宽度"）
+      let userScale = 1.0;
+      let pageCount = 0;
+      let renderVersion = 0; // 渲染版本号，防止并发渲染导致顺序错乱
+
+      async function load() {
+        const buf = await fetch(fileUrl).then(r => r.arrayBuffer());
+        const loadingTask = pdfjsLib.getDocument({ data: buf });
+        pdfDoc = await loadingTask.promise;
+        pageCount = pdfDoc.numPages;
+        pageCountSpan.textContent = pageCount;
+        currentPage = Math.min(Math.max(1, currentPage), pageCount);
+        // 先刷新页码，避免出现 "- / N" 的短暂闪烁
+        updateButtons();
+        await renderAllPages();
+      }
+
+      function updateButtons() {
+        pageNumSpan.textContent = currentPage;
+      }
+
+      async function renderAllPages() {
+        if (!pdfDoc) return;
+        // 递增渲染版本号，之前的渲染会检测到版本不匹配并中止
+        renderVersion++;
+        const myVersion = renderVersion;
+        // 记录渲染期间用户的最新滚动位置，避免渲染完被重置
+        let desiredScrollTop = viewer.scrollTop;
+        const onTmpScroll = () => { desiredScrollTop = viewer.scrollTop; };
+        viewer.addEventListener('scroll', onTmpScroll, { passive: true });
+        const prevScrollRatio = viewer.scrollHeight ? (viewer.scrollTop / viewer.scrollHeight) : 0;
+        const targetPageToKeep = currentPage;
+        viewer.innerHTML = '';
+        const width = viewer.clientWidth ? Math.min(1100, viewer.clientWidth - 24) : 1100;
+        // 顺序渲染，确保页面按 1..N 追加
+        for (let i = 1; i <= pageCount; i++) {
+          // 每次循环检查版本号，如果已被新的渲染请求覆盖则中止
+          if (renderVersion !== myVersion) {
+            console.log('Render aborted, newer render started');
+            // 渲染被中止时，尽可能恢复用户最新滚动位置并移除监听
+            try { viewer.scrollTop = desiredScrollTop; } catch (e) {}
+            viewer.removeEventListener('scroll', onTmpScroll);
+            return;
+          }
+          const page = await pdfDoc.getPage(i);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const fitScale = width / baseViewport.width;
+          const finalViewport = page.getViewport({ scale: fitScale * userScale });
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'page-wrapper';
+          wrapper.id = `page-${i}`;
+          wrapper.style.width = `${finalViewport.width}px`;
+          wrapper.style.height = `${finalViewport.height}px`;
+
+          const canvas = document.createElement('canvas');
+          canvas.className = 'page-canvas';
+          const ctx = canvas.getContext('2d');
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          canvas.width = Math.floor(finalViewport.width * dpr);
+          canvas.height = Math.floor(finalViewport.height * dpr);
+          canvas.style.width = `${finalViewport.width}px`;
+          canvas.style.height = `${finalViewport.height}px`;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.imageSmoothingEnabled = false;
+          wrapper.appendChild(canvas);
+          viewer.appendChild(wrapper);
+
+          await page.render({ canvasContext: ctx, viewport: finalViewport }).promise;
+
+          // 再次检查版本，避免文本层渲染被中断后还追加
+          if (renderVersion !== myVersion) {
+            console.log('Render aborted after canvas, newer render started');
+            try { viewer.scrollTop = desiredScrollTop; } catch (e) {}
+            viewer.removeEventListener('scroll', onTmpScroll);
+            return;
+          }
+
+          try {
+            const textContent = await page.getTextContent();
+            const textLayerDiv = document.createElement('div');
+            textLayerDiv.className = 'textLayer';
+            textLayerDiv.style.setProperty('--scale-factor', finalViewport.scale);
+            textLayerDiv.style.width = `${finalViewport.width}px`;
+            textLayerDiv.style.height = `${finalViewport.height}px`;
+            wrapper.appendChild(textLayerDiv);
+            
+            // 使用官方 TextLayer API
+            const textLayer = new TextLayer({
+              textContentSource: textContent,
+              container: textLayerDiv,
+              viewport: finalViewport,
+              // 设置页面尺寸用于百分比计算
+              pageWidth: baseViewport.width,
+              pageHeight: baseViewport.height
+            });
+            
+            await textLayer.render();
+          } catch (e) {
+            console.warn('textLayer render failed', e);
+          }
+        }
+        // 渲染完后恢复用户最新滚动位置（优先），否则退回到按比例的位置
+        if (renderVersion === myVersion) {
+          const fallbackTop = Math.round(prevScrollRatio * viewer.scrollHeight);
+          const newScrollTop = (typeof desiredScrollTop === 'number') ? desiredScrollTop : fallbackTop;
+          try { viewer.scrollTop = newScrollTop; } catch (e) {}
+        }
+        // 移除临时滚动监听
+        viewer.removeEventListener('scroll', onTmpScroll);
+      }
+
+      function scrollToPage(n, smooth = true) {
+        const el = document.getElementById(`page-${n}`);
+        if (el) {
+          el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+        }
+      }
+
+      // 根据滚动实时估算当前页码（提升感知与避免频繁强制滚动）
+      function updateCurrentPageByScroll() {
+        const wrappers = Array.from(viewer.querySelectorAll('.page-wrapper'));
+        if (!wrappers.length) return;
+        const top = viewer.scrollTop + 4; // 少量偏移，减少抖动
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < wrappers.length; i++) {
+          const el = wrappers[i];
+          const dist = Math.abs(el.offsetTop - top);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = i;
+          }
+        }
+        const nextPage = bestIdx + 1;
+        if (nextPage !== currentPage) {
+          currentPage = nextPage;
+          updateButtons();
+        }
+      }
+
+      viewer.addEventListener('scroll', () => {
+        if (!scrollTicking) {
+          scrollTicking = true;
+          requestAnimationFrame(() => {
+            updateCurrentPageByScroll();
+            scrollTicking = false;
+          });
+        }
+      });
+
+      // Controls
+      zoomInBtn.addEventListener('click', async () => { userScale = Math.min(3, userScale + 0.1); await renderAllPages(); });
+      zoomOutBtn.addEventListener('click', async () => { userScale = Math.max(0.5, userScale - 0.1); await renderAllPages(); });
+      fitWidthBtn.addEventListener('click', async () => { userScale = 1.0; await renderAllPages(); });
+      downloadBtn.addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        // 命名：优先使用 name 参数；否则保持默认
+        const name = fileName || 'document.pdf';
+        a.download = name.endsWith('.pdf') ? name : `${name}.pdf`;
+        a.click();
+      });
+
+      window.addEventListener('resize', () => { renderAllPages(); });
+
+      // 父页面消息：启用/禁用应用按钮，结束loading，显示/隐藏返回可视化按钮
+      window.addEventListener('message', (e) => {
+        const data = e?.data || {};
+        if (data.type === 'set-apply-enabled') {
+          const enabled = !!data.enabled;
+          applyBtn.disabled = !enabled;
+          applyBtn.classList.toggle('primary', enabled);
+          applyBtn.classList.remove('loading');
+        } else if (data.type === 'apply-visualization-done') {
+          applyBtn.classList.remove('loading');
+          applyBtn.disabled = false;
+          applyBtn.classList.add('primary');
+        } else if (data.type === 'show-viz-buttons') {
+          // 显示返回可视化的按钮
+          const buttons = data.buttons || [];
+          vizButtonsContainer.innerHTML = '';
+          if (buttons.length > 0) {
+            buttons.forEach(btn => {
+              const button = document.createElement('button');
+              button.className = 'btn viz-return';
+              button.textContent = btn.name;
+              button.onclick = () => {
+                try {
+                  window.parent.postMessage({ 
+                    type: 'return-to-visualization', 
+                    vizId: btn.id 
+                  }, '*');
+                } catch (e) {}
+              };
+              vizButtonsContainer.appendChild(button);
+            });
+            vizButtonsContainer.style.display = 'flex';
+            vizButtonsContainer.style.gap = '6px';
+          } else {
+            vizButtonsContainer.style.display = 'none';
+          }
+        } else if (data.type === 'hide-viz-buttons') {
+          // 隐藏返回可视化的按钮
+          vizButtonsContainer.innerHTML = '';
+          vizButtonsContainer.style.display = 'none';
+        }
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>

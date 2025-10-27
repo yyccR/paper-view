@@ -1,0 +1,796 @@
+<template>
+  <div class="workspace-container">
+    <Sidebar 
+      @toggle-notification="showNotificationPanel = !showNotificationPanel"
+      @toggle-user="showUserPanel = !showUserPanel"
+    />
+    
+    <!-- 可视化模板边栏 - 固定在导航栏右边 -->
+    <aside class="template-sidebar">
+      <div class="template-header">
+        <h3>{{ $t('workspace.templates.title') }}</h3>
+      </div>
+      <div class="template-grid">
+        <div 
+          v-for="(image, index) in thumbnails" 
+          :key="index" 
+          class="template-item" 
+          :class="{ active: selectedTemplate === index }"
+          @click="selectTemplate(index)"
+        >
+          <img :src="`/assets/index_images/${image}`" :alt="`模板 ${index + 1}`" class="template-image">
+          <span class="template-label">{{ getLabel(image) }}</span>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- 遮罩层 -->
+    <div 
+      v-if="showNotificationPanel || showUserPanel" 
+      class="overlay" 
+      @click="closeAllPanels"
+    ></div>
+
+    <!-- 通知面板 -->
+    <div class="notification-panel" :class="{ active: showNotificationPanel }">
+      <div class="notification-header">
+        <h3>{{ $t('workspace.notification.title') }}</h3>
+        <button class="close-btn" @click="showNotificationPanel = false">&times;</button>
+      </div>
+      <div class="notification-list">
+        <div class="notification-item unread">
+          <div class="notification-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M22 11.08V12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C14.44 2 16.66 2.89 18.38 4.34" stroke="currentColor" stroke-width="2"/>
+              <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </div>
+          <div class="notification-content">
+            <p>{{ $t('workspace.notification.analysisComplete') }}</p>
+            <span class="notification-time">{{ $t('workspace.notification.minutesAgo', { count: 5 }) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户面板 -->
+    <div class="user-panel" :class="{ active: showUserPanel }">
+      <div class="user-info">
+        <img src="/default-avatar.svg" alt="用户头像" class="user-avatar">
+        <div class="user-details">
+          <h4>{{ $t('workspace.user.guestUser') }}</h4>
+          <p>{{ $t('workspace.user.notLoggedIn') }}</p>
+        </div>
+      </div>
+      <div class="user-menu">
+        <a href="#profile" class="menu-item">{{ $t('workspace.user.profile') }}</a>
+        <a href="#settings" class="menu-item">{{ $t('workspace.user.settings') }}</a>
+        <div class="menu-divider"></div>
+        <a href="#login" class="menu-item">{{ $t('workspace.user.login') }}</a>
+      </div>
+    </div>
+
+    <!-- 主工作区 -->
+    <main class="workspace">
+      <!-- 顶部搜索区域 -->
+      <div class="workspace-header" v-show="!showPdfPreview">
+        <div class="search-wrapper">
+          <button class="upload-btn" @click="triggerFileUpload" :title="$t('workspace.uploadPdf')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 15V3M12 3L8 7M12 3L16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M2 17L2 19C2 20.1046 2.89543 21 4 21L20 21C21.1046 21 22 20.1046 22 19V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <input 
+            type="text" 
+            class="search-input" 
+            v-model="searchQuery"
+            @keypress.enter="handleSearch"
+            :placeholder="$t('workspace.searchPlaceholder')"
+          >
+          <button class="search-btn" @click="handleSearch" :disabled="isSearching">
+            <svg v-if="!isSearching" width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" 
+                    stroke="currentColor" 
+                    stroke-width="2" 
+                    stroke-linecap="round"/>
+            </svg>
+            <div v-else class="search-spinner"></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- PDF预览区域 -->
+      <div class="pdf-preview-section" v-if="showPdfPreview" :class="{ 'pdf-collapsed': showVisualization && !pdfExpanded }">
+        <!-- PDF内容区域 -->
+        <div class="preview-content" :class="{ 'pdf-expanded': pdfExpanded }">
+          <!-- 圆形进度加载 -->
+          <div v-if="isDownloading" class="pdf-loading">
+            <div class="circle-wrapper">
+              <svg class="progress-ring" width="120" height="120">
+                <circle class="progress-ring__background" stroke="#ecf0f1" stroke-width="10" fill="transparent" r="52" cx="60" cy="60" />
+                <circle class="progress-ring__progress" :stroke="progressColor" stroke-width="10" fill="transparent" r="52" cx="60" cy="60"
+                        :style="{ strokeDasharray: circumference, strokeDashoffset: dashOffset }" stroke-linecap="round" />
+              </svg>
+              <div class="progress-text">{{ downloadProgress }}%</div>
+            </div>
+          </div>
+
+          <!-- PDF.js 画布预览 -->
+          <div v-if="!showVisualization" class="pdf-viewer" style="width:100%; height:100%; overflow: auto;">
+            <template v-if="!useIframeFallback">
+              <div ref="pdfContainer" class="pdf-canvas-container"></div>
+              <p v-if="!isDownloading && !pdfBlobUrl" style="color:#95a5a6;">准备预览PDF...</p>
+            </template>
+            <template v-else>
+              <iframe v-if="viewerSrc" ref="viewerFrame" :src="viewerSrc" @load="onViewerLoaded" style="border:none; width:100%; height:100%;"></iframe>
+              <p v-else style="color:#95a5a6;">准备预览PDF...</p>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- 可视化结果区域 -->
+      <div class="visualization-section" v-if="showVisualization">
+        <!-- 右上角按钮组 -->
+        <div class="viz-controls">
+          <button class="viz-btn back-to-pdf-btn" @click="backToPdfPreview" :title="$t('workspace.pdf.backToPaper')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="btn-text">{{ $t('workspace.pdf.backToPaper') }}</span>
+          </button>
+        </div>
+        
+        <!-- 可视化图表，直接填充整个区域 -->
+        <div class="visualization-content">
+          <ConnectedPapersGraph 
+            v-if="visualizationData && visualizationData.nodes"
+            :papers="visualizationData.nodes"
+            :edges="visualizationData.edges"
+            :mainPaper="visualizationData.mainPaper"
+          />
+          <WordCloudHeatmap 
+            v-if="wordCloudData && wordCloudData.length > 0"
+            :wordData="wordCloudData"
+          />
+        </div>
+      </div>
+
+      <!-- 内容展示区域 -->
+      <div class="content-section" v-show="!showPdfPreview">
+        <!-- 欢迎界面 -->
+        <div class="welcome-view" v-if="currentView === 'welcome'">
+          <div class="welcome-icon">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none">
+              <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2>{{ $t('workspace.welcome.title') }}</h2>
+          <p>{{ $t('workspace.welcome.subtitle') }}</p>
+        </div>
+
+        <!-- 搜索结果列表 -->
+        <div class="search-results" v-if="currentView === 'search'">
+          <h3 class="results-title">{{ $t('workspace.searchResults.title') }}</h3>
+          <div class="results-list">
+            <div 
+              v-for="result in paginatedResults" 
+              :key="result.title" 
+              class="result-item"
+              @click="selectPaper(result)"
+            >
+              <h3 class="result-title">{{ result.title }}</h3>
+              <p class="result-authors">{{ result.authors }}</p>
+              <p class="result-abstract">{{ result.abstract }}</p>
+              <div class="result-meta">
+                <span>{{ $t('workspace.searchResults.year', { year: result.year }) }}</span>
+                <span>{{ $t('workspace.searchResults.citations', { count: result.citations }) }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- 分页 -->
+          <div class="pagination" v-if="totalPages > 1">
+            <span class="pagination-info">{{ $t('workspace.pagination.showing') }} {{ startItem }}-{{ endItem }} {{ $t('workspace.pagination.of') }} {{ $t('workspace.pagination.total', { total: allResults.length }) }}</span>
+            <button class="pagination-btn" @click="goToPage(1)" :disabled="currentPage === 1">{{ $t('workspace.pagination.first') }}</button>
+            <button class="pagination-btn" @click="goToPage(currentPage - 1)" :disabled="currentPage === 1">{{ $t('workspace.pagination.previous') }}</button>
+            <div class="pagination-pages">
+              <button 
+                v-for="page in pageButtons" 
+                :key="page"
+                class="pagination-btn" 
+                :class="{ active: page === currentPage }"
+                @click="goToPage(page)"
+              >
+                {{ page }}
+              </button>
+            </div>
+            <button class="pagination-btn" @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages">{{ $t('workspace.pagination.next') }}</button>
+            <button class="pagination-btn" @click="goToPage(totalPages)" :disabled="currentPage === totalPages">{{ $t('workspace.pagination.last') }}</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 隐藏的文件上传输入 -->
+    <input type="file" ref="fileInput" accept=".pdf" style="display: none;" @change="handleFileUpload">
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { apiService } from '@/api'
+import { isURL } from '@/utils/helpers'
+import Sidebar from '@/components/Sidebar.vue'
+import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
+import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
+import { parseBibTeX, convertToConnectedPapersFormat } from '@/utils/bibParser'
+
+const { t } = useI18n()
+
+const route = useRoute()
+
+const showNotificationPanel = ref(false)
+const showUserPanel = ref(false)
+const searchQuery = ref('')
+const currentView = ref('welcome')
+const isSearching = ref(false)
+const thumbnails = ref([])
+// 根据图片文件名获取标签（使用 i18n）
+const getLabel = (imageName) => {
+  const key = imageName.replace('.png', '')
+  return t(`workspace.templates.${key}`, imageName.replace('.png', ''))
+}
+
+// 新增状态
+const selectedTemplate = ref(null)
+const selectedPaperTitle = ref('')
+const showPdfPreview = ref(false)
+const showVisualization = ref(false)
+const isProcessing = ref(false)
+const visualizationImage = ref('')
+const visualizationData = ref(null)
+const wordCloudData = ref([])
+const pdfExpanded = ref(false)
+const currentPdfUrl = ref('')
+// 跟踪已加载的可视化模板
+const loadedVisualizations = ref([])
+// PDF 下载与预览
+const isDownloading = ref(false)
+const downloadProgress = ref(0)
+const pdfBlobUrl = ref('')
+// PDF.js 渲染相关 / 专用viewer
+const pdfContainer = ref(null)
+const pdfDocRef = ref(null)
+const pdfLibRef = ref(null)
+const isRendering = ref(false)
+const maxRenderPages = 8
+const useIframeFallback = ref(false)
+const viewerSrc = ref('')
+const viewerFrame = ref(null)
+// 圆形进度参数
+const radius = 52
+const circumferenceVal = 2 * Math.PI * radius
+const circumference = `${circumferenceVal}px`
+const progressColor = '#3498db'
+const dashOffset = computed(() => {
+  const pct = Math.max(0, Math.min(100, downloadProgress.value))
+  const val = circumferenceVal - (pct / 100) * circumferenceVal
+  return `${val}px`
+})
+
+const allResults = ref([])
+const currentPage = ref(1)
+const itemsPerPage = 10
+const fileInput = ref(null)
+
+const totalPages = computed(() => Math.ceil(allResults.value.length / itemsPerPage))
+const startItem = computed(() => (currentPage.value - 1) * itemsPerPage + 1)
+const endItem = computed(() => Math.min(currentPage.value * itemsPerPage, allResults.value.length))
+
+const paginatedResults = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  return allResults.value.slice(start, start + itemsPerPage)
+})
+
+const pageButtons = computed(() => {
+  const maxButtons = 5
+  let start = Math.max(1, currentPage.value - Math.floor(maxButtons / 2))
+  let end = Math.min(totalPages.value, start + maxButtons - 1)
+  if (end - start < maxButtons - 1) {
+    start = Math.max(1, end - maxButtons + 1)
+  }
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+})
+
+const loadThumbnails = async () => {
+  try {
+    const data = await apiService.getIndexImages()
+    if (data.images) {
+      thumbnails.value = data.images
+    }
+  } catch (error) {
+    console.error('加载缩略图失败:', error)
+  }
+}
+
+const handleSearch = async () => {
+  const query = searchQuery.value.trim()
+  if (!query || isSearching.value) return
+
+  isSearching.value = true
+  currentView.value = 'search'
+  try {
+    const data = await apiService.searchPapers(query)
+    const results = Array.isArray(data?.results) ? data.results : []
+    allResults.value = results.map(r => ({
+      title: r.title,
+      authors: r.authors,
+      abstract: r.abstract,
+      year: r.year,
+      citations: r.citations || 0,
+      url: r.url,
+      pdf_url: r.pdf_url
+    }))
+  } catch (error) {
+    console.error('搜索失败:', error)
+    allResults.value = []
+  } finally {
+    isSearching.value = false
+  }
+  currentPage.value = 1
+}
+
+const generateMockResults = (query) => {
+  const mockResults = []
+  for (let i = 1; i <= 20; i++) {
+    mockResults.push({
+      title: `关于"${query}"的研究论文 ${i}`,
+      authors: 'Zhang Wei, Li Ming, Wang Fang',
+      abstract: '这是一篇关于人工智能和机器学习的研究论文。本文探讨了深度学习在自然语言处理中的应用。',
+      year: 2020 + (i % 5),
+      citations: Math.floor(Math.random() * 100)
+    })
+  }
+  return mockResults
+}
+
+const goToPage = (page) => {
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  currentPage.value = page
+}
+
+const triggerFileUpload = () => {
+  fileInput.value.click()
+}
+
+const handleFileUpload = (event) => {
+  const file = event.target.files[0]
+  if (file && file.type === 'application/pdf') {
+    console.log('已选择文件:', file.name)
+  }
+}
+
+const selectTemplate = (index) => {
+  selectedTemplate.value = index
+  const imageName = thumbnails.value[index]
+  const templateName = getLabel(imageName)
+  console.log('选中模板:', templateName)
+  // 通知内置viewer启用"应用可视化"按钮
+  if (viewerFrame.value && viewerFrame.value.contentWindow) {
+    viewerFrame.value.contentWindow.postMessage({ type: 'set-apply-enabled', enabled: true }, '*')
+  }
+}
+
+const selectPaper = async (paper) => {
+  selectedPaperTitle.value = paper.title
+  currentPdfUrl.value = paper.pdf_url
+  showPdfPreview.value = true
+  showVisualization.value = false
+  visualizationData.value = null
+  wordCloudData.value = []
+  loadedVisualizations.value = []
+  pdfBlobUrl.value = ''
+  isDownloading.value = true
+  downloadProgress.value = 0
+  useIframeFallback.value = false
+  try {
+    const resp = await apiService.proxyPdf(paper.pdf_url, (e) => {
+      if (e && e.total) {
+        downloadProgress.value = Math.min(100, Math.round((e.loaded / e.total) * 100))
+      }
+    })
+    // Axios 已返回 Blob
+    const blob = resp
+    // 创建blob URL
+    pdfBlobUrl.value = URL.createObjectURL(blob)
+    // 解析文件名用于下载（取原pdf链接最后一段）
+    let name = 'document.pdf'
+    try {
+      if (paper.pdf_url) {
+        const u = new URL(paper.pdf_url)
+        const seg = u.pathname.split('/').filter(Boolean).pop() || 'document'
+        name = seg.endsWith('.pdf') ? seg : `${seg}.pdf`
+      }
+    } catch (e) {}
+    // 使用内置viewer页面进行阅读器式预览（携带name参数）
+    viewerSrc.value = `/pdf-viewer.html?file=${encodeURIComponent(pdfBlobUrl.value)}&name=${encodeURIComponent(name)}`
+    useIframeFallback.value = true
+  } catch (err) {
+    console.error('PDF下载失败:', err)
+  } finally {
+    isDownloading.value = false
+  }
+}
+
+const onViewerLoaded = () => {
+  // iframe加载完成后，设置初始状态
+  if (viewerFrame.value && viewerFrame.value.contentWindow) {
+    // 设置应用按钮可用状态
+    const enabled = selectedTemplate.value !== null
+    viewerFrame.value.contentWindow.postMessage({ type: 'set-apply-enabled', enabled }, '*')
+    
+    // 如果有已加载的可视化，显示返回按钮
+    if (loadedVisualizations.value.length > 0) {
+      const vizButtons = loadedVisualizations.value.map(v => ({
+        id: v.id,
+        name: v.templateName
+      }))
+      viewerFrame.value.contentWindow.postMessage({ 
+        type: 'show-viz-buttons', 
+        buttons: vizButtons 
+      }, '*')
+    }
+  }
+}
+
+const closePdfPreview = () => {
+  showPdfPreview.value = false
+  showVisualization.value = false
+  visualizationData.value = null
+  pdfExpanded.value = false
+  // 清空已加载的可视化记录
+  loadedVisualizations.value = []
+  // 释放blob URL
+  if (pdfBlobUrl.value) {
+    URL.revokeObjectURL(pdfBlobUrl.value)
+    pdfBlobUrl.value = ''
+  }
+  // 清空pdf容器
+  if (pdfContainer.value) {
+    pdfContainer.value.innerHTML = ''
+  }
+  viewerSrc.value = ''
+}
+
+const applyVisualization = async () => {
+  if (selectedTemplate.value === null) {
+    console.error('请先选择一个模板')
+    return
+  }
+
+  const imageName = thumbnails.value[selectedTemplate.value]
+  const templateKey = imageName.replace('.png', '')
+  const templateName = getLabel(imageName)
+  
+  // 使用模板key判断是否为词云图，避免受语言切换影响
+  if (templateKey === 'wordcloud') {
+    if (!currentPdfUrl.value) {
+      alert(t('workspace.visualization.noPdfLoaded'))
+      return
+    }
+    
+    isProcessing.value = true
+    
+    try {
+      // 调用后端API提取词云数据
+      const response = await apiService.extractWordcloud(currentPdfUrl.value)
+      
+      if (response.success && response.data) {
+        wordCloudData.value = response.data
+        visualizationData.value = null
+        
+        // 记录已加载的可视化
+        const vizId = `${selectedTemplate.value}-${Date.now()}`
+        if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+          loadedVisualizations.value.push({
+            id: vizId,
+            templateIndex: selectedTemplate.value,
+            templateName: templateName,
+            data: wordCloudData.value
+          })
+        }
+        
+        // 显示可视化
+        showVisualization.value = true
+        pdfExpanded.value = false
+        
+        await nextTick()
+      } else {
+        throw new Error(response.error || t('workspace.visualization.loadFailed'))
+      }
+    } catch (error) {
+      console.error('词云生成失败:', error)
+      alert(t('workspace.visualization.wordcloudFailed'))
+    } finally {
+      isProcessing.value = false
+    }
+  } else if (templateKey === 'connected_paper') {
+    isProcessing.value = true
+    
+    try {
+      // 加载BIB文件
+      const response = await fetch('/assets/bib/ConnectedPapers-for-Qwen3-Technical-Report.bib')
+      const bibContent = await response.text()
+      
+      // 解析BIB文件
+      const papers = parseBibTeX(bibContent)
+      console.log('解析出', papers.length, '篇论文')
+      
+      // 转换为ConnectedPapers格式
+      visualizationData.value = convertToConnectedPapersFormat(papers)
+      wordCloudData.value = []
+      console.log('可视化数据:', visualizationData.value)
+      console.log('节点数量:', visualizationData.value.nodes.length)
+      console.log('边数量:', visualizationData.value.edges.length)
+      
+      // 记录已加载的可视化
+      const vizId = `${selectedTemplate.value}-${Date.now()}`
+      if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+        loadedVisualizations.value.push({
+          id: vizId,
+          templateIndex: selectedTemplate.value,
+          templateName: templateName,
+          data: visualizationData.value
+        })
+      }
+      
+      // 显示可视化
+      showVisualization.value = true
+      pdfExpanded.value = false
+      
+      // 等待DOM更新后再次触发渲染
+      await nextTick()
+      
+    } catch (error) {
+      console.error('可视化失败:', error)
+      alert(t('workspace.visualization.loadFailed'))
+    } finally {
+      isProcessing.value = false
+    }
+  } else {
+    // 其他模板使用原有逻辑
+    isProcessing.value = true
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    visualizationImage.value = '/assets/index_images/visualization_sample.png'
+    
+    // 记录已加载的可视化
+    const vizId = `${selectedTemplate.value}-${Date.now()}`
+    if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+      loadedVisualizations.value.push({
+        id: vizId,
+        templateIndex: selectedTemplate.value,
+        templateName: templateName,
+        data: null
+      })
+    }
+    
+    showVisualization.value = true
+    isProcessing.value = false
+  }
+  
+  // 通知内置viewer处理完成，恢复按钮，并隐藏返回可视化按钮
+  if (viewerFrame.value && viewerFrame.value.contentWindow) {
+    viewerFrame.value.contentWindow.postMessage({ type: 'apply-visualization-done' }, '*')
+    viewerFrame.value.contentWindow.postMessage({ type: 'hide-viz-buttons' }, '*')
+  }
+}
+
+const togglePdfExpand = () => {
+  pdfExpanded.value = !pdfExpanded.value
+}
+
+const backToPdfPreview = () => {
+  // 关闭可视化，返回PDF预览（保留可视化数据）
+  showVisualization.value = false
+  pdfExpanded.value = false
+  
+  // 通知 pdf-viewer 显示返回可视化的按钮
+  if (viewerFrame.value && viewerFrame.value.contentWindow) {
+    const vizButtons = loadedVisualizations.value.map(v => ({
+      id: v.id,
+      name: v.templateName
+    }))
+    viewerFrame.value.contentWindow.postMessage({ 
+      type: 'show-viz-buttons', 
+      buttons: vizButtons 
+    }, '*')
+  }
+}
+
+const returnToVisualization = (vizId) => {
+  // 返回可视化界面
+  if (vizId) {
+    // 如果指定了 vizId，加载对应的可视化
+    const viz = loadedVisualizations.value.find(v => v.id === vizId)
+    if (viz && viz.data) {
+      // 判断是词云数据还是关系图数据
+      if (Array.isArray(viz.data) && viz.data.length > 0 && viz.data[0].word) {
+        // 词云数据
+        wordCloudData.value = viz.data
+        visualizationData.value = null
+      } else {
+        // 关系图数据
+        visualizationData.value = viz.data
+        wordCloudData.value = []
+      }
+    }
+  }
+  showVisualization.value = true
+  
+  // 通知 pdf-viewer 隐藏返回可视化的按钮
+  if (viewerFrame.value && viewerFrame.value.contentWindow) {
+    viewerFrame.value.contentWindow.postMessage({ 
+      type: 'hide-viz-buttons'
+    }, '*')
+  }
+}
+
+const closeAllPanels = () => {
+  showNotificationPanel.value = false
+  showUserPanel.value = false
+}
+
+onMounted(() => {
+  loadThumbnails()
+  const query = route.query.q || route.query.url
+  if (query) {
+    searchQuery.value = query
+    handleSearch()
+  }
+  // 监听内置viewer返回消息
+  const onMessage = (e) => {
+    if (e && e.data && e.data.type === 'close-pdf') {
+      closePdfPreview()
+      return
+    }
+    if (e && e.data && e.data.type === 'apply-visualization') {
+      applyVisualization()
+      return
+    }
+    if (e && e.data && e.data.type === 'return-to-visualization') {
+      returnToVisualization(e.data.vizId)
+      return
+    }
+  }
+  window.addEventListener('message', onMessage)
+  // 保存到实例上以便卸载
+  messageListenerRef.value = onMessage
+})
+
+const messageListenerRef = ref(null)
+
+onUnmounted(() => {
+  if (messageListenerRef.value) {
+    window.removeEventListener('message', messageListenerRef.value)
+  }
+})
+
+// 初始化并渲染 PDF 到画布
+const initPdfViewer = async () => {
+  try {
+    if (!pdfBlobUrl.value) return
+    isRendering.value = true
+    // 动态加载 pdf.js（使用CDN ESM）
+    if (!pdfLibRef.value) {
+      let pdfjsLib = null
+      try {
+        pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs')
+      } catch (e1) {
+        try {
+          pdfjsLib = await import('https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.min.mjs')
+        } catch (e2) {
+          console.error('加载pdf.js失败，切换iframe回退', e1, e2)
+          useIframeFallback.value = true
+          return
+        }
+      }
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs'
+      pdfLibRef.value = pdfjsLib
+    }
+    const pdfjsLib = pdfLibRef.value
+    // 确保容器存在，否则回退到 iframe
+    if (!pdfContainer.value) {
+      useIframeFallback.value = true
+      return
+    }
+    // 将 blob URL 转为 ArrayBuffer
+    const buf = await fetch(pdfBlobUrl.value).then(r => r.arrayBuffer())
+    const loadingTask = pdfjsLib.getDocument({ data: buf })
+    const pdf = await loadingTask.promise
+    pdfDocRef.value = pdf
+    // 清空容器并渲染前 maxRenderPages 页
+    pdfContainer.value.innerHTML = ''
+    const pagesToRender = Math.min(pdf.numPages, maxRenderPages)
+    for (let pageNum = 1; pageNum <= pagesToRender; pageNum++) {
+      const page = await pdf.getPage(pageNum)
+      const viewport = page.getViewport({ scale: 1.25 })
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      canvas.style.display = 'block'
+      canvas.style.margin = '12px auto'
+      canvas.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
+      pdfContainer.value.appendChild(canvas)
+      await page.render({ canvasContext: context, viewport }).promise
+    }
+    // 如果页数较多，给出提示
+    if (pdf.numPages > maxRenderPages) {
+      const tip = document.createElement('div')
+      tip.textContent = `已显示前 ${maxRenderPages} 页，共 ${pdf.numPages} 页`
+      tip.style.textAlign = 'center'
+      tip.style.color = '#7f8c8d'
+      tip.style.margin = '8px 0 16px'
+      pdfContainer.value.appendChild(tip)
+    }
+  } catch (e) {
+    console.error('PDF渲染失败，切换iframe回退:', e)
+    useIframeFallback.value = true
+  } finally {
+    isRendering.value = false
+  }
+}
+</script>
+
+<style scoped>
+/* 预览容器内的加载样式 */
+.pdf-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.circle-wrapper {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.progress-ring {
+  transform: rotate(-90deg);
+}
+.progress-ring__background,
+.progress-ring__progress {
+  transition: stroke-dashoffset 0.2s ease;
+}
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -60%);
+  font-size: 20px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+.progress-subtext {
+  position: absolute;
+  top: calc(50% + 28px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: #7f8c8d;
+}
+.pdf-canvas-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 0 24px;
+}
+</style>
