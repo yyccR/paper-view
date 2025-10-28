@@ -4,6 +4,36 @@ from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from .models import AIModelConfig
 import json
+import os
+
+# API Base URLs配置
+API_BASE_CONFIG = {
+    'gpt': 'https://api.openai.com/v1',
+    'claude': 'https://api.anthropic.com/v1',
+    'gemini': 'https://generativelanguage.googleapis.com/v1',
+    'qwen': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    'grok': 'https://api.x.ai/v1',
+    'doubao': 'https://ark.cn-beijing.volces.com/api/v3',
+    'deepseek': 'https://api.deepseek.com/v1',
+}
+
+# API Key环境变量映射
+API_KEY_ENV_MAP = {
+    'gpt': 'OPENAI_API_KEY',
+    'claude': 'CLAUDE_API_KEY',
+    'gemini': 'GEMINI_API_KEY',
+    'qwen': 'QWEN_API_KEY',
+    'grok': 'GROK_API_KEY',
+    'doubao': 'DOUBAO_API_KEY',
+    'deepseek': 'DEEPSEEK_API_KEY',
+}
+
+def get_api_key(provider):
+    """从环境变量获取API Key"""
+    env_var = API_KEY_ENV_MAP.get(provider)
+    if env_var:
+        return os.getenv(env_var, '')
+    return ''
 
 @csrf_exempt
 @api_view(['GET', 'POST'])
@@ -106,68 +136,65 @@ def ai_model_options(request):
         'gpt': {
             'name': 'GPT',
             'logo': 'openai',
+            'api_base': API_BASE_CONFIG.get('gpt', ''),
+            'api_key': get_api_key('gpt'),
             'models': [
                 {'id': 'gpt-5', 'name': 'GPT-5', 'description': 'Latest flagship model (Aug 2025) - Best for complex reasoning'},
                 {'id': 'gpt-4o', 'name': 'GPT-4o', 'description': 'Multimodal flagship model with vision capabilities'},
-                {'id': 'gpt-4o-mini', 'name': 'GPT-4o mini', 'description': 'Affordable and intelligent small model'},
-                {'id': 'o3', 'name': 'o3', 'description': 'Advanced reasoning model for complex tasks'},
-                {'id': 'o1', 'name': 'o1', 'description': 'Reasoning model for problem-solving'},
-                {'id': 'o1-mini', 'name': 'o1-mini', 'description': 'Fast reasoning model'},
             ]
         },
         'claude': {
             'name': 'Claude',
             'logo': 'claude',
+            'api_base': API_BASE_CONFIG.get('claude', ''),
+            'api_key': get_api_key('claude'),
             'models': [
                 {'id': 'claude-4-5-sonnet-20250929', 'name': 'Claude 4.5 Sonnet', 'description': 'Latest model (Sept 2025) - Best for coding & agents, 1M token context'},
                 {'id': 'claude-4-1-opus-20250805', 'name': 'Claude 4.1 Opus', 'description': 'Hybrid reasoning model (Aug 2025) - 200K context'},
-                {'id': 'claude-3-5-sonnet-20241022', 'name': 'Claude 3.5 Sonnet', 'description': 'Previous generation intelligent model'},
-                {'id': 'claude-3-5-haiku-20241022', 'name': 'Claude 3.5 Haiku', 'description': 'Fastest and most compact model'},
             ]
         },
         'gemini': {
             'name': 'Gemini',
             'logo': 'gemini',
+            'api_base': API_BASE_CONFIG.get('gemini', ''),
+            'api_key': get_api_key('gemini'),
             'models': [
                 {'id': 'gemini-2.5-pro', 'name': 'Gemini 2.5 Pro', 'description': 'Latest model (June 2025) - 1M token context, best for research'},
-                {'id': 'gemini-2.0-flash-exp', 'name': 'Gemini 2.0 Flash', 'description': 'Next generation fast model'},
-                {'id': 'gemini-1.5-pro', 'name': 'Gemini 1.5 Pro', 'description': 'Best for complex tasks with long context'},
-                {'id': 'gemini-1.5-flash', 'name': 'Gemini 1.5 Flash', 'description': 'Fast and versatile model'},
             ]
         },
         'qwen': {
             'name': 'Qwen',
             'logo': 'qwen',
+            'api_base': API_BASE_CONFIG.get('qwen', ''),
+            'api_key': get_api_key('qwen'),
             'models': [
                 {'id': 'qwen3-max', 'name': 'Qwen3-Max', 'description': 'Latest trillion-parameter model (Sept 2025) - Strong coding'},
-                {'id': 'qwen3-omni', 'name': 'Qwen3-Omni', 'description': 'Multimodal model with vision and audio'},
-                {'id': 'qwen-max', 'name': 'Qwen Max', 'description': 'Most capable previous generation'},
-                {'id': 'qwen-plus', 'name': 'Qwen Plus', 'description': 'Balanced performance'},
-                {'id': 'qwq-32b-preview', 'name': 'QwQ 32B', 'description': 'Reasoning model'},
             ]
         },
         'grok': {
             'name': 'Grok',
             'logo': 'grok',
+            'api_base': API_BASE_CONFIG.get('grok', ''),
+            'api_key': get_api_key('grok'),
             'models': [
                 {'id': 'grok-4', 'name': 'Grok 4', 'description': 'Latest model (July 2025) - Real-time X search & tool use'},
-                {'id': 'grok-3', 'name': 'Grok 3', 'description': 'Advanced reasoning with real-time data'},
-                {'id': 'grok-2', 'name': 'Grok 2', 'description': 'Previous generation model'},
             ]
         },
         'doubao': {
             'name': 'Doubao',
             'logo': 'doubao',
+            'api_base': API_BASE_CONFIG.get('doubao', ''),
+            'api_key': get_api_key('doubao'),
             'models': [
                 {'id': 'doubao-pro-256k', 'name': 'Doubao Pro 256K', 'description': 'Pro version with 256K context'},
-                {'id': 'doubao-pro-128k', 'name': 'Doubao Pro 128K', 'description': 'Pro version with 128K context'},
                 {'id': 'doubao-pro-32k', 'name': 'Doubao Pro 32K', 'description': 'Pro version with 32K context'},
-                {'id': 'doubao-lite-32k', 'name': 'Doubao Lite 32K', 'description': 'Lite version with 32K context'},
             ]
         },
         'deepseek': {
             'name': 'DeepSeek',
             'logo': 'deepseek',
+            'api_base': API_BASE_CONFIG.get('deepseek', ''),
+            'api_key': get_api_key('deepseek'),
             'models': [
                 {'id': 'deepseek-r1', 'name': 'DeepSeek R1', 'description': 'Cost-effective reasoning model (2025)'},
                 {'id': 'deepseek-v3', 'name': 'DeepSeek V3', 'description': 'Latest general-purpose model'},

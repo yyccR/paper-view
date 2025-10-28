@@ -158,7 +158,6 @@
                 <div class="model-info">
                   <div class="model-name">
                     {{ model.name }}
-                    <span v-if="isModelSelected(key, model.id)" class="current-tag">Current</span>
                   </div>
                   <div class="model-description">{{ model.description }}</div>
                 </div>
@@ -976,11 +975,13 @@ const isModelSelected = (provider, modelId) => {
 
 const selectModel = async (provider, model) => {
   try {
+    // 从aiProviders中获取api_base和api_key
+    const providerData = aiProviders.value[provider]
     const config = {
       provider: provider,
       model_name: model.id,
-      api_base: '',
-      api_key: ''
+      api_base: providerData?.api_base || '',
+      api_key: providerData?.api_key || ''
     }
     
     const response = await apiService.saveAIConfig(config)
