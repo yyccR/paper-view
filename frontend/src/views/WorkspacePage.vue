@@ -1,12 +1,16 @@
 <template>
   <div class="workspace-container">
     <Sidebar 
-      @toggle-notification="showNotificationPanel = !showNotificationPanel"
-      @toggle-user="showUserPanel = !showUserPanel"
+      @toggle-home="handleHomeToggle"
+      @toggle-space="handleSpaceToggle"
+      @toggle-ai="handleAIToggle"
+      @toggle-subscribe="handleSubscribeToggle"
+      @toggle-notification="handleNotificationToggle"
+      @toggle-user="handleUserToggle"
     />
     
     <!-- 可视化模板边栏 - 固定在导航栏右边 -->
-    <aside class="template-sidebar">
+    <aside class="template-sidebar" :class="{ active: showTemplatePanel }">
       <div class="template-header">
         <h3>{{ $t('workspace.templates.title') }}</h3>
       </div>
@@ -17,6 +21,9 @@
           class="template-item" 
           :class="{ active: selectedTemplate === index }"
           @click="selectTemplate(index)"
+          @mouseenter="handleTemplateHover(index, $event)"
+          @mouseleave="handleTemplateLeave"
+          ref="templateItems"
         >
           <img :src="`/assets/index_images/${image}`" :alt="`模板 ${index + 1}`" class="template-image">
           <span class="template-label">{{ getLabel(image) }}</span>
@@ -24,7 +31,28 @@
       </div>
     </aside>
     
-    <!-- 遮罩层 -->
+    <!-- 悬浮提示框 - 使用Teleport渲染到body -->
+    <Teleport to="body">
+      <div 
+        v-if="hoveredTemplate !== null && tooltipPosition" 
+        class="template-tooltip-portal"
+        :style="{ 
+          top: tooltipPosition.top + 'px', 
+          left: tooltipPosition.left + 'px',
+          transform: tooltipPosition.transform 
+        }"
+      >
+        <div class="tooltip-content">
+          <h4 class="tooltip-title">{{ getLabel(thumbnails[hoveredTemplate]) }}</h4>
+          <div class="tooltip-image-wrapper">
+            <img :src="`/assets/index_images/${thumbnails[hoveredTemplate]}`" :alt="getLabel(thumbnails[hoveredTemplate])" class="tooltip-image">
+          </div>
+          <p class="tooltip-description">{{ getDescription(thumbnails[hoveredTemplate]) }}</p>
+        </div>
+      </div>
+    </Teleport>
+    
+    <!-- 遮罩层 - AI面板不显示遮罩 -->
     <div 
       v-if="showNotificationPanel || showUserPanel" 
       class="overlay" 
@@ -67,6 +95,162 @@
         <a href="#settings" class="menu-item">{{ $t('workspace.user.settings') }}</a>
         <div class="menu-divider"></div>
         <a href="#login" class="menu-item">{{ $t('workspace.user.login') }}</a>
+      </div>
+    </div>
+
+    <!-- AI模型配置面板 -->
+    <div class="ai-config-panel" :class="{ active: showAIPanel }">
+      <div class="ai-config-header">
+        <h3>{{ $t('aiConfig.title') }}</h3>
+        <button class="close-btn" @click="showAIPanel = false">&times;</button>
+      </div>
+      <div class="ai-config-content">
+        <!-- 当前选中的模型 -->
+        <div v-if="currentAIConfig" class="current-model-info">
+          <div class="info-row">
+            <div class="info-label">{{ $t('aiConfig.currentModel') }}</div>
+            <div class="current-badge">Active</div>
+          </div>
+          <div class="info-value">
+            <span class="provider-tag">{{ getProviderDisplayName(currentAIConfig.provider) }}</span>
+            <span class="model-tag">{{ currentAIConfig.model_name }}</span>
+          </div>
+        </div>
+        
+        <!-- 模型提供商列表 -->
+        <div class="ai-providers-grid">
+          <div 
+            v-for="(provider, key) in aiProviders" 
+            :key="key"
+            class="provider-card"
+            :class="{ 
+              expanded: expandedProvider === key,
+              'has-selected': hasSelectedModel(key)
+            }"
+          >
+            <div class="provider-header" @click="toggleProvider(key)">
+              <div class="provider-info">
+                <div class="provider-logo">
+                  <img :src="`/assets/logos/${provider.logo}.png`" :alt="provider.name" @error="handleLogoError">
+                </div>
+                <div class="provider-details">
+                  <span class="provider-name">{{ provider.name }}</span>
+                  <span class="model-count">{{ provider.models.length }} {{ $t('aiConfig.models') }}</span>
+                </div>
+              </div>
+              <div class="provider-actions">
+                <span v-if="hasSelectedModel(key)" class="active-indicator">●</span>
+                <svg class="expand-icon" :class="{ rotated: expandedProvider === key }" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            
+            <!-- 模型列表 -->
+            <div v-if="expandedProvider === key" class="models-list">
+              <div 
+                v-for="model in provider.models" 
+                :key="model.id"
+                class="model-item"
+                @click="selectModel(key, model)"
+                :class="{ selected: isModelSelected(key, model.id) }"
+              >
+                <div class="model-info">
+                  <div class="model-name">
+                    {{ model.name }}
+                    <span v-if="isModelSelected(key, model.id)" class="current-tag">Current</span>
+                  </div>
+                  <div class="model-description">{{ model.description }}</div>
+                </div>
+                <div v-if="isModelSelected(key, model.id)" class="selected-badge">✓</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 自定义新增模型卡片 -->
+          <div class="provider-card custom-model-card" :class="{ expanded: showCustomModelForm }">
+            <div class="provider-header" @click="toggleCustomModelForm">
+              <div class="provider-info">
+                <div class="provider-logo custom-logo">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                </div>
+                <div class="provider-details">
+                  <span class="provider-name">{{ $t('aiConfig.customModel.title') }}</span>
+                  <span class="model-count">{{ $t('aiConfig.customModel.subtitle') }}</span>
+                </div>
+              </div>
+              <div class="provider-actions">
+                <svg class="expand-icon" :class="{ rotated: showCustomModelForm }" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            
+            <!-- 自定义模型表单 -->
+            <div v-if="showCustomModelForm" class="custom-model-form">
+              <div class="form-group">
+                <label>{{ $t('aiConfig.customModel.providerName') }}</label>
+                <input 
+                  v-model="customModel.provider" 
+                  type="text" 
+                  :placeholder="$t('aiConfig.customModel.providerPlaceholder')"
+                  class="form-input"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label>{{ $t('aiConfig.customModel.modelName') }}</label>
+                <input 
+                  v-model="customModel.modelName" 
+                  type="text" 
+                  :placeholder="$t('aiConfig.customModel.modelPlaceholder')"
+                  class="form-input"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label>{{ $t('aiConfig.customModel.apiBase') }}</label>
+                <input 
+                  v-model="customModel.apiBase" 
+                  type="text" 
+                  :placeholder="$t('aiConfig.customModel.apiBasePlaceholder')"
+                  class="form-input"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label>{{ $t('aiConfig.customModel.apiKey') }}</label>
+                <input 
+                  v-model="customModel.apiKey" 
+                  type="password" 
+                  :placeholder="$t('aiConfig.customModel.apiKeyPlaceholder')"
+                  class="form-input"
+                />
+              </div>
+              
+              <div class="form-group">
+                <label>{{ $t('aiConfig.customModel.description') }}</label>
+                <textarea 
+                  v-model="customModel.description" 
+                  :placeholder="$t('aiConfig.customModel.descriptionPlaceholder')"
+                  class="form-textarea"
+                  rows="2"
+                ></textarea>
+              </div>
+              
+              <div class="form-actions">
+                <button @click="saveCustomModel" class="btn-primary" :disabled="!isCustomModelValid">
+                  {{ $t('aiConfig.customModel.save') }}
+                </button>
+                <button @click="resetCustomModelForm" class="btn-secondary">
+                  {{ $t('aiConfig.customModel.reset') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -235,6 +419,8 @@ const route = useRoute()
 
 const showNotificationPanel = ref(false)
 const showUserPanel = ref(false)
+const showAIPanel = ref(false)
+const showTemplatePanel = ref(true) // 默认显示模板面板
 const searchQuery = ref('')
 const currentView = ref('welcome')
 const isSearching = ref(false)
@@ -243,6 +429,76 @@ const thumbnails = ref([])
 const getLabel = (imageName) => {
   const key = imageName.replace('.png', '')
   return t(`workspace.templates.${key}`, imageName.replace('.png', ''))
+}
+
+// 根据图片文件名获取描述（使用 i18n）
+const getDescription = (imageName) => {
+  const key = imageName.replace('.png', '')
+  return t(`workspace.templates.descriptions.${key}`, '')
+}
+
+// 悬浮状态
+const hoveredTemplate = ref(null)
+const tooltipPosition = ref(null)
+const templateItems = ref([])
+
+// AI模型配置相关
+const aiProviders = ref({})
+const expandedProvider = ref(null)
+const currentAIConfig = ref(null)
+const showCustomModelForm = ref(false)
+const customModel = ref({
+  provider: '',
+  modelName: '',
+  apiBase: '',
+  apiKey: '',
+  description: ''
+})
+
+// 处理模板悬浮事件
+const handleTemplateHover = (index, event) => {
+  hoveredTemplate.value = index
+  const target = event.currentTarget
+  const rect = target.getBoundingClientRect()
+  
+  // tooltip尺寸估算（与CSS中的尺寸对应）
+  const tooltipHeight = 260 // 大约高度：标题+图片160px+描述+padding
+  const tooltipWidth = 280
+  
+  // 计算初始位置：在元素右侧，垂直居中
+  let top = rect.top + rect.height / 2
+  let left = rect.right + 12
+  
+  // 检查是否超出视口底部
+  const viewportHeight = window.innerHeight
+  const halfTooltipHeight = tooltipHeight / 2
+  
+  if (top + halfTooltipHeight > viewportHeight) {
+    // 超出底部，调整为底部对齐
+    top = viewportHeight - tooltipHeight - 10 // 10px底部边距
+  } else if (top - halfTooltipHeight < 0) {
+    // 超出顶部，调整为顶部对齐
+    top = 10 // 10px顶部边距
+  }
+  
+  // 检查是否超出视口右侧
+  const viewportWidth = window.innerWidth
+  if (left + tooltipWidth > viewportWidth) {
+    // 超出右侧，显示在元素左侧
+    left = rect.left - tooltipWidth - 12
+  }
+  
+  tooltipPosition.value = {
+    top: top,
+    left: left,
+    transform: (top === rect.top + rect.height / 2) ? 'translateY(-50%)' : 'none'
+  }
+}
+
+// 处理鼠标离开事件
+const handleTemplateLeave = () => {
+  hoveredTemplate.value = null
+  tooltipPosition.value = null
 }
 
 // 新增状态
@@ -642,10 +898,179 @@ const returnToVisualization = (vizId) => {
 const closeAllPanels = () => {
   showNotificationPanel.value = false
   showUserPanel.value = false
+  showAIPanel.value = false
+  showTemplatePanel.value = false
+}
+
+// 处理各个按钮的点击事件
+const handleHomeToggle = () => {
+  showTemplatePanel.value = true
+  showAIPanel.value = false
+  showNotificationPanel.value = false
+  showUserPanel.value = false
+}
+
+const handleSpaceToggle = () => {
+  // 暂时没有space面板，关闭其他所有面板
+  closeAllPanels()
+}
+
+const handleAIToggle = () => {
+  showAIPanel.value = true
+  showTemplatePanel.value = false
+  showNotificationPanel.value = false
+  showUserPanel.value = false
+}
+
+const handleSubscribeToggle = () => {
+  // 暂时没有subscribe面板，关闭其他所有面板
+  closeAllPanels()
+}
+
+const handleNotificationToggle = () => {
+  showNotificationPanel.value = true
+  showAIPanel.value = false
+  showTemplatePanel.value = false
+  showUserPanel.value = false
+}
+
+const handleUserToggle = () => {
+  showUserPanel.value = true
+  showAIPanel.value = false
+  showTemplatePanel.value = false
+  showNotificationPanel.value = false
+}
+
+// AI模型配置相关方法
+const loadAIOptions = async () => {
+  try {
+    const response = await apiService.getAIOptions()
+    if (response.success) {
+      aiProviders.value = response.data
+    }
+  } catch (error) {
+    console.error('加载AI模型选项失败:', error)
+  }
+}
+
+const loadCurrentAIConfig = async () => {
+  try {
+    const response = await apiService.getAIConfig()
+    if (response.success && response.data) {
+      currentAIConfig.value = response.data
+    }
+  } catch (error) {
+    console.error('加载当前AI配置失败:', error)
+  }
+}
+
+const toggleProvider = (providerKey) => {
+  expandedProvider.value = expandedProvider.value === providerKey ? null : providerKey
+}
+
+const isModelSelected = (provider, modelId) => {
+  return currentAIConfig.value && 
+         currentAIConfig.value.provider === provider && 
+         currentAIConfig.value.model_name === modelId
+}
+
+const selectModel = async (provider, model) => {
+  try {
+    const config = {
+      provider: provider,
+      model_name: model.id,
+      api_base: '',
+      api_key: ''
+    }
+    
+    const response = await apiService.saveAIConfig(config)
+    if (response.success) {
+      currentAIConfig.value = response.data
+      console.log('AI模型配置已保存:', response.data)
+    }
+  } catch (error) {
+    console.error('保存AI配置失败:', error)
+    alert(t('aiConfig.saveFailed'))
+  }
+}
+
+const handleLogoError = (e) => {
+  // Logo加载失败时使用默认图标
+  e.target.style.display = 'none'
+}
+
+// 获取提供商显示名称
+const getProviderDisplayName = (provider) => {
+  const names = {
+    'gpt': 'GPT',
+    'claude': 'Claude',
+    'qwen': '通义千问',
+    'doubao': '豆包',
+    'gemini': 'Gemini'
+  }
+  return names[provider] || provider
+}
+
+// 检查提供商是否有选中的模型
+const hasSelectedModel = (provider) => {
+  return currentAIConfig.value && currentAIConfig.value.provider === provider
+}
+
+// 自定义模型相关方法
+const isCustomModelValid = computed(() => {
+  return customModel.value.provider.trim() !== '' && 
+         customModel.value.modelName.trim() !== ''
+})
+
+const toggleCustomModelForm = () => {
+  showCustomModelForm.value = !showCustomModelForm.value
+  if (showCustomModelForm.value) {
+    expandedProvider.value = null // 关闭其他展开的提供商
+  }
+}
+
+const saveCustomModel = async () => {
+  if (!isCustomModelValid.value) {
+    alert(t('aiConfig.customModel.validationError'))
+    return
+  }
+  
+  try {
+    const config = {
+      provider: customModel.value.provider.trim(),
+      model_name: customModel.value.modelName.trim(),
+      api_base: customModel.value.apiBase.trim(),
+      api_key: customModel.value.apiKey.trim()
+    }
+    
+    const response = await apiService.saveAIConfig(config)
+    if (response.success) {
+      currentAIConfig.value = response.data
+      alert(t('aiConfig.customModel.saveSuccess'))
+      resetCustomModelForm()
+      showCustomModelForm.value = false
+    }
+  } catch (error) {
+    console.error('保存自定义模型失败:', error)
+    alert(t('aiConfig.customModel.saveFailed'))
+  }
+}
+
+const resetCustomModelForm = () => {
+  customModel.value = {
+    provider: '',
+    modelName: '',
+    apiBase: '',
+    apiKey: '',
+    description: ''
+  }
 }
 
 onMounted(() => {
   loadThumbnails()
+  loadAIOptions()
+  loadCurrentAIConfig()
+  
   const query = route.query.q || route.query.url
   if (query) {
     searchQuery.value = query

@@ -33,6 +33,7 @@ from core.content_views import (
 from core.index_views import get_index_images
 from core.workspace_views import search_papers
 from core.wordcloud_views import extract_wordcloud_data
+from core.ai_config_views import ai_model_config, ai_model_options
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -48,6 +49,10 @@ urlpatterns = [
     path('api/content/image/', get_image, name='get_image'),
     path('api/proxy/pdf/', proxy_pdf, name='proxy_pdf'),
     path('api/wordcloud/extract/', extract_wordcloud_data, name='extract_wordcloud_data'),
+    
+    # AI配置相关
+    path('api/ai/config/', ai_model_config, name='ai_model_config'),
+    path('api/ai/options/', ai_model_options, name='ai_model_options'),
 ]
 
 # 开发环境下提供media和assets文件访问

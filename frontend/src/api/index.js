@@ -53,7 +53,12 @@ export const apiService = {
   }),
   
   // 词云
-  extractWordcloud: (pdfUrl) => api.post('/wordcloud/extract/', { pdf_url: pdfUrl })
+  extractWordcloud: (pdfUrl) => api.post('/wordcloud/extract/', { pdf_url: pdfUrl }),
+  
+  // AI模型配置
+  getAIConfig: () => api.get('/ai/config/'),
+  saveAIConfig: (config) => api.post('/ai/config/', config),
+  getAIOptions: () => api.get('/ai/options/')
 }
 
 export default api

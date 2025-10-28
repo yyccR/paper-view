@@ -138,7 +138,44 @@ export default {
       'structure': 'Structure Diagram',
       'tree_radial': 'Radial Tree',
       'treemap_drip_down': 'Treemap',
-      'wordcloud': 'Word Cloud'
+      'wordcloud': 'Word Cloud',
+      // Template descriptions
+      descriptions: {
+        '3d_bar': '3D visualization for paper data multi-dimensional analysis',
+        'Plot_group_vertical_3d_barplots': 'Multiple experimental groups categorical comparison',
+        'area_chart': 'Time-series trend analysis for experimental data',
+        'bar': 'Treatment vs control group data comparison',
+        'basic_3d_pie_plot': 'Research proportion distribution 3D visualization',
+        'basic_GO_term_bp_cc_mf_bar_plot': 'Gene functional enrichment analysis visualization',
+        'basic_dual_y_axis_horizontal_bar_plot': 'Dual-metric horizontal comparison analysis',
+        'basic_ggpubr_box_plot': 'Statistical distribution analysis for experimental data',
+        'basic_ggviolin_plot': 'Sample data probability density visualization',
+        'basic_histogram_with_without_fit': 'Frequency distribution with fitting curves',
+        'basic_horizontal_bar': 'Horizontal bar for long category labels',
+        'basic_kaplan_meier_survival_curve_plot': 'Medical research survival curve and risk analysis',
+        'basic_left_right_bar_plot': 'Mirror comparison for control vs treatment data',
+        'basic_ridgeline_plot': 'Multi-group data distribution density ridgeline',
+        'basic_scatter_plot_with_fc_lines': 'Scatter plot with fold-change trend lines',
+        'basic_upsetR_plot': 'Multi-set intersection relationship visualization',
+        'basic_vertical_lollipop_chart': 'Highlight key experimental data points',
+        'connected_paper': 'Literature citation network graph visualization',
+        'funnel': 'Research workflow stage conversion analysis',
+        'h_bar': 'Simple horizontal bar for paper data comparison',
+        'heatmap': 'Gene expression or correlation matrix heatmap',
+        'matrix_mbti': 'Personality type data matrix distribution',
+        'matrix_sparkline': 'Multi-dimensional trend matrix sparklines',
+        'node_align': 'Research elements hierarchical node alignment',
+        'paper_map': 'Literature topic clustering map visualization',
+        'pie': 'Research sample or category proportion pie chart',
+        'plot_basic_m6a_exp_scatter_plot': 'm6A modification site expression scatter plot',
+        'plot_basic_scatter_with_marginal_histograms_plot': 'Scatter plot with marginal frequency histograms',
+        'scatter': 'Variable correlation analysis scatter visualization',
+        'scatter2': 'Experimental data 2D spatial distribution scatter',
+        'structure': 'Paper structure or organizational hierarchy diagram',
+        'tree_radial': 'Research taxonomy radial tree structure',
+        'treemap_drip_down': 'Hierarchical data proportion treemap visualization',
+        'wordcloud': 'Paper keyword frequency word cloud analysis'
+      }
     },
     
     // PDF preview
@@ -216,5 +253,49 @@ export default {
   language: {
     zh: '中文',
     en: 'English'
+  },
+  
+  aiConfig: {
+    title: 'AI Model Selection',
+    selectModel: 'Select AI Model',
+    currentModel: 'Current Model',
+    provider: 'Provider',
+    modelName: 'Model Name',
+    configure: 'Configure',
+    apiKey: 'API Key',
+    apiBase: 'API Base URL',
+    save: 'Save',
+    cancel: 'Cancel',
+    saveSuccess: 'Saved Successfully',
+    saveFailed: 'Save Failed',
+    models: 'models',
+    providers: {
+      gpt: 'GPT',
+      claude: 'Claude',
+      qwen: 'Qwen',
+      doubao: 'Doubao',
+      gemini: 'Gemini',
+      grok: 'Grok',
+      deepseek: 'DeepSeek'
+    },
+    customModel: {
+      title: 'Custom Model',
+      subtitle: 'Add your own AI model',
+      providerName: 'Provider Name',
+      providerPlaceholder: 'e.g., OpenAI, Anthropic',
+      modelName: 'Model Name',
+      modelPlaceholder: 'e.g., gpt-4, claude-3',
+      apiBase: 'API Base URL',
+      apiBasePlaceholder: 'e.g., https://api.openai.com/v1',
+      apiKey: 'API Key',
+      apiKeyPlaceholder: 'Enter your API key',
+      description: 'Description',
+      descriptionPlaceholder: 'Brief description of this model',
+      save: 'Save Config',
+      reset: 'Reset',
+      saveSuccess: 'Custom model saved successfully!',
+      saveFailed: 'Save failed, please try again',
+      validationError: 'Please fill in provider name and model name'
+    }
   }
 }

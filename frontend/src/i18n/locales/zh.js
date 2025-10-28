@@ -138,7 +138,44 @@ export default {
       'structure': '结构图',
       'tree_radial': '径向树图',
       'treemap_drip_down': '矩形树图',
-      'wordcloud': '词云图'
+      'wordcloud': '词云图',
+      // 模板描述
+      descriptions: {
+        '3d_bar': '立体展示论文数据多维度对比分析',
+        'Plot_group_vertical_3d_barplots': '多组实验数据分类对比可视化呈现',
+        'area_chart': '论文实验数据时序变化趋势分析',
+        'bar': '论文中实验组与对照组数据对比',
+        'basic_3d_pie_plot': '研究占比分布立体可视化展示',
+        'basic_GO_term_bp_cc_mf_bar_plot': '基因功能富集分析结果可视化',
+        'basic_dual_y_axis_horizontal_bar_plot': '双指标数据对比分析横向展示',
+        'basic_ggpubr_box_plot': '实验数据分布特征统计分析图',
+        'basic_ggviolin_plot': '样本数据概率密度分布可视化',
+        'basic_histogram_with_without_fit': '实验结果频数分布及拟合曲线',
+        'basic_horizontal_bar': '长标签分类数据横向柱状对比',
+        'basic_kaplan_meier_survival_curve_plot': '医学研究生存曲线与风险分析',
+        'basic_left_right_bar_plot': '正负对照实验数据镜像对比',
+        'basic_ridgeline_plot': '多组实验数据分布密度山脊图',
+        'basic_scatter_plot_with_fc_lines': '实验数据散点图叠加变化趋势',
+        'basic_upsetR_plot': '多集合数据交集关系可视化',
+        'basic_vertical_lollipop_chart': '关键实验数据点突出展示对比',
+        'connected_paper': '文献引用关系网络图谱可视化',
+        'funnel': '研究流程各阶段转化率分析',
+        'h_bar': '论文数据简洁横向柱状对比',
+        'heatmap': '基因表达或相关性矩阵热力图',
+        'matrix_mbti': '性格类型数据矩阵分布分析',
+        'matrix_sparkline': '多维数据趋势矩阵式迷你图',
+        'node_align': '研究要素层次关系节点对齐',
+        'paper_map': '文献主题聚类地图分布可视化',
+        'pie': '研究样本或类别占比饼图展示',
+        'plot_basic_m6a_exp_scatter_plot': 'm6A修饰位点表达差异散点图',
+        'plot_basic_scatter_with_marginal_histograms_plot': '散点分布图附边缘频数直方图',
+        'scatter': '论文变量相关性分析散点可视化',
+        'scatter2': '实验数据二维空间分布散点图',
+        'structure': '论文结构或组织层次关系图谱',
+        'tree_radial': '研究分类体系径向树状结构图',
+        'treemap_drip_down': '层次数据占比矩形树图可视化',
+        'wordcloud': '论文关键词频率词云图分析'
+      }
     },
     
     // PDF预览
@@ -216,5 +253,49 @@ export default {
   language: {
     zh: '中文',
     en: 'English'
+  },
+  
+  aiConfig: {
+    title: 'AI模型选择',
+    selectModel: '选择AI模型',
+    currentModel: '当前模型',
+    provider: '提供商',
+    modelName: '模型名称',
+    configure: '配置',
+    apiKey: 'API Key',
+    apiBase: 'API基础URL',
+    save: '保存',
+    cancel: '取消',
+    saveSuccess: '保存成功',
+    saveFailed: '保存失败',
+    models: '个模型',
+    providers: {
+      gpt: 'GPT',
+      claude: 'Claude',
+      qwen: '通义千问',
+      doubao: '豆包',
+      gemini: 'Gemini',
+      grok: 'Grok',
+      deepseek: 'DeepSeek'
+    },
+    customModel: {
+      title: '自定义模型',
+      subtitle: '添加自己的AI模型',
+      providerName: '提供商名称',
+      providerPlaceholder: '例如: OpenAI, Anthropic',
+      modelName: '模型名称',
+      modelPlaceholder: '例如: gpt-4, claude-3',
+      apiBase: 'API基础URL',
+      apiBasePlaceholder: '例如: https://api.openai.com/v1',
+      apiKey: 'API密钥',
+      apiKeyPlaceholder: '输入您的API密钥',
+      description: '模型描述',
+      descriptionPlaceholder: '简要描述此模型的特点',
+      save: '保存配置',
+      reset: '重置',
+      saveSuccess: '自定义模型保存成功！',
+      saveFailed: '保存失败，请重试',
+      validationError: '请填写提供商名称和模型名称'
+    }
   }
 }

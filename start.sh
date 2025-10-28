@@ -72,7 +72,18 @@ else
     echo -e "${YELLOW}继续启动...${NC}"
 fi
 
+# 检查是否有未创建的迁移
+echo -e "${YELLOW}检查模型变更...${NC}"
+if python manage.py makemigrations --dry-run --noinput | grep -q "No changes detected"; then
+    echo -e "${GREEN}✓ 无模型变更${NC}"
+else
+    echo -e "${YELLOW}检测到模型变更，创建迁移文件...${NC}"
+    python manage.py makemigrations --noinput
+    echo -e "${GREEN}✓ 迁移文件创建完成${NC}"
+fi
+
 # 执行数据库迁移
+echo -e "${YELLOW}应用数据库迁移...${NC}"
 python manage.py migrate --noinput
 echo -e "${GREEN}✓ 数据库迁移完成${NC}"
 
