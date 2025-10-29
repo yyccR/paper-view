@@ -58,7 +58,21 @@ export const apiService = {
   // AI模型配置
   getAIConfig: () => api.get('/ai/config/'),
   saveAIConfig: (config) => api.post('/ai/config/', config),
-  getAIOptions: () => api.get('/ai/options/')
+  getAIOptions: () => api.get('/ai/options/'),
+  
+  // 翻译和聊天
+  translateText: (text, targetLang) => api.post('/translate/', { text, target_lang: targetLang }),
+  chatWithText: (messages, contextText) => api.post('/chat/', { messages, context_text: contextText }),
+  
+  // 流式翻译和聊天（返回EventSource URL）
+  getTranslateStreamUrl: () => '/api/translate/stream/',
+  getChatStreamUrl: () => '/api/chat/stream/',
+  
+  // 会话管理
+  getSessions: () => api.get('/sessions/'),
+  getSession: (sessionId) => api.get(`/sessions/${sessionId}/`),
+  createSession: (data) => api.post('/sessions/', data),
+  deleteSession: (sessionId) => api.delete(`/sessions/${sessionId}/`)
 }
 
 export default api

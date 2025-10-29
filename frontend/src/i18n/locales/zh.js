@@ -89,8 +89,10 @@ export default {
     // 通知面板
     notification: {
       title: '通知',
+      chatHistory: '对话历史',
       analysisComplete: '论文分析完成',
-      minutesAgo: '{count}分钟前'
+      minutesAgo: '{count}分钟前',
+      noSessions: '暂无对话记录'
     },
     
     // 用户面板
@@ -297,5 +299,30 @@ export default {
       saveFailed: '保存失败，请重试',
       validationError: '请填写提供商名称和模型名称'
     }
+  }
+  ,
+  // 文本选择工具条
+  selection: {
+    translate: '翻译',
+    ask: '提问',
+    copy: '复制',
+    language: '切换语言',
+    lang: {
+      zh: '中文',
+      en: 'English',
+      ja: '日本語',
+      ko: '한국어',
+      es: 'Español'
+    }
+  },
+  
+  // 翻译聊天面板
+  translateChat: {
+    title: '翻译',
+    chatTitle: 'AI助手',
+    newChat: '新建对话',
+    inputPlaceholder: '输入消息...',
+    translating: '翻译中...',
+    sending: '发送中...'
   }
 }
