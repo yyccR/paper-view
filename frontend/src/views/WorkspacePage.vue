@@ -59,24 +59,37 @@
       @click="closeAllPanels"
     ></div>
 
-    <!-- 通知面板 -->
+    <!-- 通知面板 - 显示聊天会话历史 -->
     <div class="notification-panel" :class="{ active: showNotificationPanel }">
       <div class="notification-header">
         <h3>{{ $t('workspace.notification.title') }}</h3>
         <button class="close-btn" @click="showNotificationPanel = false">&times;</button>
       </div>
       <div class="notification-list">
-        <div class="notification-item unread">
-          <div class="notification-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M22 11.08V12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C14.44 2 16.66 2.89 18.38 4.34" stroke="currentColor" stroke-width="2"/>
-              <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" stroke-width="2"/>
+        <div 
+          v-for="session in chatSessions" 
+          :key="session.id"
+          class="session-item"
+          @click="openSession(session.id)"
+        >
+          <div class="session-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <div class="notification-content">
-            <p>{{ $t('workspace.notification.analysisComplete') }}</p>
-            <span class="notification-time">{{ $t('workspace.notification.minutesAgo', { count: 5 }) }}</span>
+          <div class="session-content">
+            <p class="session-title">{{ session.title }}</p>
+            <div class="session-meta">
+              <span class="session-type" :class="`type-${session.session_type}`">
+                {{ session.session_type === 'translate' ? '翻译' : '对话' }}
+              </span>
+              <span class="session-count">{{ session.message_count }} 条消息</span>
+            </div>
+            <span class="session-time">{{ formatTime(session.last_message_at || session.created_at) }}</span>
           </div>
+        </div>
+        <div v-if="chatSessions.length === 0" class="empty-state">
+          <p>{{ $t('workspace.notification.noSessions') }}</p>
         </div>
       </div>
     </div>
@@ -97,6 +110,16 @@
         <a href="#login" class="menu-item">{{ $t('workspace.user.login') }}</a>
       </div>
     </div>
+
+    <!-- 翻译聊天面板 -->
+    <TranslateChat 
+      v-model="showTranslateChat"
+      :selectedText="selectionText"
+      :targetLang="selectedLang"
+      :mode="chatMode"
+      :paperTitle="selectedPaperTitle"
+      @sessionClosed="handleSessionClosed"
+    />
 
     <!-- AI模型配置面板 -->
     <div class="ai-config-panel" :class="{ active: showAIPanel }">
@@ -124,7 +147,7 @@
             :key="key"
             class="provider-card"
             :class="{ 
-              expanded: expandedProvider === key,
+              expanded: expandedProviders.has(key),
               'has-selected': hasSelectedModel(key)
             }"
           >
@@ -140,14 +163,15 @@
               </div>
               <div class="provider-actions">
                 <span v-if="hasSelectedModel(key)" class="active-indicator">●</span>
-                <svg class="expand-icon" :class="{ rotated: expandedProvider === key }" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <svg class="expand-icon" :class="{ rotated: expandedProviders.has(key) }" width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
             </div>
             
-            <!-- 模型列表 -->
-            <div v-if="expandedProvider === key" class="models-list">
+            <!-- 模型列表：添加向下展开过渡动画 -->
+            <transition name="expand-down">
+            <div v-show="expandedProviders.has(key)" class="models-list">
               <div 
                 v-for="model in provider.models" 
                 :key="model.id"
@@ -164,6 +188,7 @@
                 <div v-if="isModelSelected(key, model.id)" class="selected-badge">✓</div>
               </div>
             </div>
+            </transition>
           </div>
           
           <!-- 自定义新增模型卡片 -->
@@ -286,7 +311,7 @@
       <!-- PDF预览区域 -->
       <div class="pdf-preview-section" v-if="showPdfPreview" :class="{ 'pdf-collapsed': showVisualization && !pdfExpanded }">
         <!-- PDF内容区域 -->
-        <div class="preview-content" :class="{ 'pdf-expanded': pdfExpanded }">
+        <div class="preview-content" :class="{ 'pdf-expanded': pdfExpanded }" ref="previewContent">
           <!-- 圆形进度加载 -->
           <div v-if="isDownloading" class="pdf-loading">
             <div class="circle-wrapper">
@@ -312,6 +337,40 @@
           </div>
         </div>
       </div>
+
+      <!-- 文本选择操作浮层 -->
+      <Teleport to="body">
+        <div 
+          v-if="showSelectionActions && selectionText"
+          class="selection-actions"
+          :style="{ top: selectionPos.top + 'px', left: selectionPos.left + 'px' }"
+          @mousedown.stop="onToolbarMouseDown"
+        >
+          <button class="sel-btn" @click="handleTranslate" :title="$t('selection.translate')">
+            {{ $t('selection.translate') }}
+          </button>
+          <div class="lang-selector" @click.stop>
+            <button class="lang-btn" @click="toggleLangMenu" :title="$t('selection.language')">
+              {{ $t(`selection.lang.${selectedLang}`) }}
+              <svg class="chevron" width="12" height="12" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <ul v-if="showLangMenu" class="lang-menu">
+              <li 
+                v-for="code in langCodes" 
+                :key="code" 
+                :class="{ active: code === selectedLang }"
+                @click="selectLang(code)"
+              >{{ $t(`selection.lang.${code}`) }}</li>
+            </ul>
+          </div>
+          <button class="sel-btn" @click="handleAsk" :title="$t('selection.ask')">
+            {{ $t('selection.ask') }}
+          </button>
+          <button class="sel-btn" @click="handleCopy" :title="$t('selection.copy')">
+            {{ $t('selection.copy') }}
+          </button>
+        </div>
+      </Teleport>
 
       <!-- 可视化结果区域 -->
       <div class="visualization-section" v-if="showVisualization">
@@ -410,6 +469,7 @@ import { isURL } from '@/utils/helpers'
 import Sidebar from '@/components/Sidebar.vue'
 import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
 import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
+import TranslateChat from '@/components/TranslateChatNew.vue'
 import { parseBibTeX, convertToConnectedPapersFormat } from '@/utils/bibParser'
 
 const { t } = useI18n()
@@ -443,7 +503,7 @@ const templateItems = ref([])
 
 // AI模型配置相关
 const aiProviders = ref({})
-const expandedProvider = ref(null)
+const expandedProviders = ref(new Set())
 const currentAIConfig = ref(null)
 const showCustomModelForm = ref(false)
 const customModel = ref({
@@ -453,6 +513,163 @@ const customModel = ref({
   apiKey: '',
   description: ''
 })
+
+// 文本选择浮层状态
+const previewContent = ref(null)
+const selectionText = ref('')
+const selectionPos = ref({ top: 0, left: 0 })
+const showSelectionActions = ref(false)
+const interactingToolbar = ref(false)
+const showLangMenu = ref(false)
+const langCodes = ref(['zh', 'en', 'ja', 'ko', 'es'])
+const selectedLang = ref('zh')
+const showTranslateChat = ref(false)
+const chatMode = ref('translate') // 'translate' or 'chat'
+const chatSessions = ref([]) // 会话历史
+
+const getViewportClampedPos = (baseTop, baseLeft, selWidth) => {
+  const margin = 8
+  const toolbarWidth = 240
+  const toolbarHeight = 36
+  // baseTop/baseLeft 已是相对视口的坐标
+  let top = Math.max(0, baseTop - margin - toolbarHeight)
+  let left = baseLeft + Math.max(0, (selWidth - toolbarWidth) / 2)
+  // 视口边界约束（基于视口，不考虑页面滚动）
+  const minLeft = margin
+  const maxLeft = window.innerWidth - toolbarWidth - margin
+  if (left < minLeft) left = minLeft
+  if (left > maxLeft) left = maxLeft
+  return { top, left }
+}
+
+const updateSelectionFromWindow = (doc) => {
+  try {
+    const sel = doc.getSelection ? doc.getSelection() : window.getSelection()
+    if (!sel || sel.isCollapsed) {
+      // 若正在与工具条交互或语言菜单打开，则不隐藏
+      if (!(interactingToolbar.value || showLangMenu.value)) {
+        selectionText.value = ''
+        showSelectionActions.value = false
+      }
+      return
+    }
+    const text = sel.toString().trim()
+    if (!text) {
+      if (!(interactingToolbar.value || showLangMenu.value)) {
+        selectionText.value = ''
+        showSelectionActions.value = false
+      }
+      return
+    }
+    const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null
+    if (!range) return
+    const rect = range.getBoundingClientRect()
+    if (!rect || (rect.width === 0 && rect.height === 0)) return
+    selectionText.value = text
+    // 计算页面坐标：区分主文档与iframe文档
+    const frameEl = doc.defaultView && doc.defaultView.frameElement
+    if (frameEl) {
+      const iframeRect = frameEl.getBoundingClientRect()
+      const baseTop = iframeRect.top + rect.top
+      const baseLeft = iframeRect.left + rect.left
+      selectionPos.value = getViewportClampedPos(baseTop, baseLeft, rect.width)
+    } else {
+      selectionPos.value = getViewportClampedPos(rect.top, rect.left, rect.width)
+    }
+    showSelectionActions.value = true
+  } catch (e) {
+    // ignore
+  }
+}
+
+const clearSelectionActions = () => {
+  selectionText.value = ''
+  showSelectionActions.value = false
+  showLangMenu.value = false
+  interactingToolbar.value = false
+}
+
+const handleCopy = async () => {
+  try {
+    await navigator.clipboard.writeText(selectionText.value)
+  } catch (e) {
+    // fallback
+    const ta = document.createElement('textarea')
+    ta.value = selectionText.value
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+  clearSelectionActions()
+}
+
+const handleTranslate = () => {
+  // 打开翻译模式的聊天面板
+  chatMode.value = 'translate'
+  showTranslateChat.value = true
+  // 不清除选择文本，保持浮层可见直到面板打开后
+  setTimeout(() => {
+    clearSelectionActions()
+  }, 100)
+}
+
+const handleAsk = () => {
+  // 打开聊天模式的面板
+  chatMode.value = 'chat'
+  showTranslateChat.value = true
+  setTimeout(() => {
+    clearSelectionActions()
+  }, 100)
+}
+
+const toggleLangMenu = () => {
+  showLangMenu.value = !showLangMenu.value
+}
+
+const selectLang = (code) => {
+  selectedLang.value = code
+  showLangMenu.value = false
+}
+
+// 当点击工具条时，保持浮层可见（避免selectionchange导致隐藏）
+const onToolbarMouseDown = () => {
+  interactingToolbar.value = true
+}
+
+// 选择事件绑定与清理
+let detachters = []
+const attachSelectionListenersTo = (doc) => {
+  if (!doc) return
+  const onMouseUp = () => setTimeout(() => updateSelectionFromWindow(doc), 0)
+  const onKeyUp = () => setTimeout(() => updateSelectionFromWindow(doc), 0)
+  const onSelectionChange = () => setTimeout(() => updateSelectionFromWindow(doc), 0)
+  const onMouseDown = (e) => {
+    const target = e.target
+    if (!(target && target.closest && target.closest('.selection-actions'))) {
+      // 点击到其他地方时，先隐藏
+      clearSelectionActions()
+    }
+  }
+  doc.addEventListener('mouseup', onMouseUp)
+  doc.addEventListener('keyup', onKeyUp)
+  doc.addEventListener('selectionchange', onSelectionChange)
+  doc.addEventListener('mousedown', onMouseDown)
+  const onScroll = () => clearSelectionActions()
+  const onResize = () => clearSelectionActions()
+  window.addEventListener('scroll', onScroll, true)
+  window.addEventListener('resize', onResize)
+  detachters.push(() => {
+    try {
+      doc.removeEventListener('mouseup', onMouseUp)
+      doc.removeEventListener('keyup', onKeyUp)
+      doc.removeEventListener('selectionchange', onSelectionChange)
+      doc.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
+    } catch {}
+  })
+}
 
 // 处理模板悬浮事件
 const handleTemplateHover = (index, event) => {
@@ -698,6 +915,13 @@ const onViewerLoaded = () => {
         type: 'show-viz-buttons', 
         buttons: vizButtons 
       }, '*')
+    }
+    // 绑定选择监听到内置PDF viewer文档
+    try {
+      const doc = viewerFrame.value.contentDocument || viewerFrame.value.contentWindow.document
+      attachSelectionListenersTo(doc)
+    } catch (e) {
+      // ignore cross-origin or timing issues
     }
   }
 }
@@ -964,7 +1188,13 @@ const loadCurrentAIConfig = async () => {
 }
 
 const toggleProvider = (providerKey) => {
-  expandedProvider.value = expandedProvider.value === providerKey ? null : providerKey
+  const next = new Set(expandedProviders.value)
+  if (next.has(providerKey)) {
+    next.delete(providerKey)
+  } else {
+    next.add(providerKey)
+  }
+  expandedProviders.value = next
 }
 
 const isModelSelected = (provider, modelId) => {
@@ -1025,9 +1255,6 @@ const isCustomModelValid = computed(() => {
 
 const toggleCustomModelForm = () => {
   showCustomModelForm.value = !showCustomModelForm.value
-  if (showCustomModelForm.value) {
-    expandedProvider.value = null // 关闭其他展开的提供商
-  }
 }
 
 const saveCustomModel = async () => {
@@ -1067,10 +1294,73 @@ const resetCustomModelForm = () => {
   }
 }
 
+// 会话管理相关
+const loadChatSessions = async () => {
+  try {
+    const response = await apiService.getSessions()
+    if (response.success) {
+      chatSessions.value = response.data
+    }
+  } catch (error) {
+    console.error('加载会话列表失败:', error)
+  }
+}
+
+const handleSessionClosed = (sessionId) => {
+  // 会话关闭时，刷新会话列表
+  loadChatSessions()
+}
+
+const openSession = async (sessionId) => {
+  try {
+    // 加载会话详情
+    const response = await apiService.getSession(sessionId)
+    if (response.success) {
+      const session = response.data.session
+      const sessionMessages = response.data.messages
+      
+      // 设置会话信息（后续可以传递给TranslateChat组件）
+      console.log('加载会话:', session.title, sessionMessages.length, '条消息')
+      
+      // TODO: 需要扩展TranslateChat组件以支持加载历史会话
+      // 目前先打开空白聊天面板
+      showTranslateChat.value = true
+      chatMode.value = session.session_type === 'translate' ? 'translate' : 'chat'
+      
+      // 关闭通知面板
+      showNotificationPanel.value = false
+    }
+  } catch (error) {
+    console.error('加载会话失败:', error)
+    // 即使加载失败，也打开聊天面板
+    showTranslateChat.value = true
+    showNotificationPanel.value = false
+  }
+}
+
+const formatTime = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const now = new Date()
+  const diff = now - date
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (hours < 24) return `${hours}小时前`
+  if (days < 7) return `${days}天前`
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+}
+
 onMounted(() => {
   loadThumbnails()
   loadAIOptions()
   loadCurrentAIConfig()
+  loadChatSessions() // 加载会话历史
+  // 监听主文档选择
+  attachSelectionListenersTo(document)
   
   const query = route.query.q || route.query.url
   if (query) {
@@ -1081,7 +1371,6 @@ onMounted(() => {
   const onMessage = (e) => {
     if (e && e.data && e.data.type === 'close-pdf') {
       closePdfPreview()
-      return
     }
     if (e && e.data && e.data.type === 'apply-visualization') {
       applyVisualization()
@@ -1089,7 +1378,6 @@ onMounted(() => {
     }
     if (e && e.data && e.data.type === 'return-to-visualization') {
       returnToVisualization(e.data.vizId)
-      return
     }
   }
   window.addEventListener('message', onMessage)

@@ -34,6 +34,10 @@ from core.index_views import get_index_images
 from core.workspace_views import search_papers
 from core.wordcloud_views import extract_wordcloud_data
 from core.ai_config_views import ai_model_config, ai_model_options
+from core.chat_views import (
+    translate_text, chat_with_text, translate_stream, 
+    chat_stream, session_manage
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -53,6 +57,16 @@ urlpatterns = [
     # AI配置相关
     path('api/ai/config/', ai_model_config, name='ai_model_config'),
     path('api/ai/options/', ai_model_options, name='ai_model_options'),
+    
+    # 翻译和聊天相关
+    path('api/translate/', translate_text, name='translate_text'),
+    path('api/chat/', chat_with_text, name='chat_with_text'),
+    path('api/translate/stream/', translate_stream, name='translate_stream'),
+    path('api/chat/stream/', chat_stream, name='chat_stream'),
+    
+    # 会话管理
+    path('api/sessions/', session_manage, name='session_list'),
+    path('api/sessions/<int:session_id>/', session_manage, name='session_detail'),
 ]
 
 # 开发环境下提供media和assets文件访问

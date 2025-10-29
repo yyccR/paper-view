@@ -89,8 +89,10 @@ export default {
     // Notification panel
     notification: {
       title: 'Notifications',
+      chatHistory: 'Chat History',
       analysisComplete: 'Paper analysis completed',
-      minutesAgo: '{count} minutes ago'
+      minutesAgo: '{count} minutes ago',
+      noSessions: 'No chat sessions'
     },
     
     // User panel
@@ -297,5 +299,30 @@ export default {
       saveFailed: 'Save failed, please try again',
       validationError: 'Please fill in provider name and model name'
     }
+  }
+  ,
+  // Selection toolbar
+  selection: {
+    translate: 'Translate',
+    ask: 'Ask',
+    copy: 'Copy',
+    language: 'Language',
+    lang: {
+      zh: '中文',
+      en: 'English',
+      ja: '日本語',
+      ko: '한국어',
+      es: 'Español'
+    }
+  },
+  
+  // Translation chat panel
+  translateChat: {
+    title: 'Translation',
+    chatTitle: 'AI Assistant',
+    newChat: 'New Chat',
+    inputPlaceholder: 'Type a message...',
+    translating: 'Translating...',
+    sending: 'Sending...'
   }
 }

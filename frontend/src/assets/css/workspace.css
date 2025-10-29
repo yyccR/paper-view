@@ -174,7 +174,7 @@
     position: fixed;
     left: 70px;
     top: 0;
-    width: 360px;
+    width: 280px;
     height: 100vh;
     background: white;
     box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
@@ -264,6 +264,94 @@
 .notification-time {
     font-size: 12px;
     color: #95a5a6;
+}
+
+/* 会话列表样式 */
+.session-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.session-item:hover {
+    background: #f8f9fa;
+    border-color: #e9ecef;
+}
+
+.session-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.session-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.session-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #2c3e50;
+    margin: 0 0 6px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session-meta {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.session-type {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.type-translate {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.type-chat {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.session-count {
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+.session-time {
+    font-size: 11px;
+    color: #95a5a6;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #95a5a6;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 14px;
 }
 
 /* 用户面板 */
@@ -646,8 +734,10 @@
     display: flex;
     flex-direction: column;
     background: #fafbfc;
-    animation: slideDown 0.3s ease;
+    /* 使用过渡动画时，避免与旧动画冲突 */
+    /* animation: slideDown 0.3s ease; */
     padding-bottom: 8px;
+    overflow: hidden; /* 过渡时裁剪内容，避免向上顶 */
 }
 
 .models-list-header {
@@ -673,6 +763,24 @@
         opacity: 1;
         max-height: 500px;
     }
+}
+
+/* 展开过渡：向下展开，500ms */
+.expand-down-enter-active,
+.expand-down-leave-active {
+    transition: max-height 0.5s ease, opacity 0.5s ease;
+}
+
+.expand-down-enter-from,
+.expand-down-leave-to {
+    max-height: 0;
+    opacity: 0;
+}
+
+.expand-down-enter-to,
+.expand-down-leave-from {
+    max-height: 800px; /* 足够容纳多行模型项 */
+    opacity: 1;
 }
 
 .model-item {
@@ -1574,6 +1682,94 @@
 
 .workspace-container ::-webkit-scrollbar-thumb:hover {
     background: #95a5a6;
+}
+
+/* 文本选择操作浮层 */
+.selection-actions {
+    position: absolute;
+    z-index: 10000;
+    display: inline-flex;
+    gap: 6px;
+    padding: 6px;
+    background: rgba(33, 33, 33, 0.95);
+    color: white;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(6px);
+}
+
+.selection-actions .sel-btn {
+    padding: 6px 10px;
+    background: transparent;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.selection-actions .sel-btn:hover {
+    background: rgba(255,255,255,0.12);
+}
+
+.selection-actions .sel-btn:active {
+    transform: translateY(1px);
+}
+
+/* 语言选择器 */
+.selection-actions .lang-selector {
+    position: relative;
+}
+
+.selection-actions .lang-btn {
+    padding: 6px 10px;
+    background: transparent;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.selection-actions .lang-btn .chevron {
+    opacity: 0.8;
+}
+
+.selection-actions .lang-menu {
+    position: absolute;
+    top: 36px;
+    right: 0;
+    min-width: 120px;
+    background: #1f1f1f;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    padding: 6px 0;
+    z-index: 10001;
+}
+
+.selection-actions .lang-menu li {
+    list-style: none;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #e6e6e6;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.selection-actions .lang-menu li:hover {
+    background: rgba(255,255,255,0.08);
+}
+
+.selection-actions .lang-menu li.active {
+    color: #fff;
+    background: rgba(52,152,219,0.25);
 }
 
 /* 自定义模型卡片样式 */
