@@ -2,7 +2,7 @@
   <div class="translate-chat-panel" :class="{ active: modelValue }">
     <!-- 头部 -->
     <div class="chat-header">
-      <div class="header-title" @click="showFullTitle = true">
+      <div class="header-title" @mouseenter="handleTitleHover" @mouseleave="showTitleTooltip = false" ref="titleRef">
         <h3>{{ truncatedTitle }}</h3>
       </div>
       <div class="header-actions">
@@ -26,18 +26,8 @@
         <div v-if="msg.role === 'assistant'" class="message-avatar">
           <img :src="aiLogo" alt="AI" class="ai-logo">
         </div>
-        <div class="message-bubble" :class="`${msg.role}-bubble`">
-          {{ msg.content }}
-        </div>
-      </div>
-      
-      <!-- 流式输入中的消息 -->
-      <div v-if="streamingMessage" class="message-row ai-row" key="streaming-message">
-        <div class="message-avatar">
-          <img :src="aiLogo" alt="AI" class="ai-logo">
-        </div>
-        <div class="message-bubble ai-bubble streaming">
-          {{ streamingMessage }}<span class="cursor">|</span>
+        <div class="message-bubble" :class="[`${msg.role}-bubble`, { 'error-bubble': msg.isError, 'streaming': msg.streaming }]">
+          {{ msg.content }}<span v-if="msg.streaming" class="cursor">|</span>
         </div>
       </div>
     </div>
@@ -65,13 +55,10 @@
       </button>
     </div>
     
-    <!-- 全标题弹窗 -->
+    <!-- 悬浯tooltip，使用Teleport移到body避免被裁剪 -->
     <Teleport to="body">
-      <div v-if="showFullTitle" class="title-modal" @click="showFullTitle = false">
-        <div class="title-modal-content" @click.stop>
-          <h4>{{ fullTitle }}</h4>
-          <button @click="showFullTitle = false" class="modal-close-btn">{{ $t('common.close') }}</button>
-        </div>
+      <div v-if="showTitleTooltip && isTitleTruncated" class="title-tooltip" :style="tooltipStyle">
+        {{ fullTitle }}
       </div>
     </Teleport>
   </div>
@@ -109,9 +96,11 @@ const isLoading = ref(false)
 const messagesContainer = ref(null)
 const inputArea = ref(null)
 const currentAIConfig = ref(null)
-const showFullTitle = ref(false)
-const streamingMessage = ref('')
+const showTitleTooltip = ref(false)
+const titleRef = ref(null)
+const tooltipStyle = ref({})
 const currentSessionId = ref(null)
+const lastTranslatedText = ref('')  // 记录上次翻译的文本
 let eventSource = null
 
 // 标题处理
@@ -123,6 +112,27 @@ const truncatedTitle = computed(() => {
   }
   return title
 })
+const isTitleTruncated = computed(() => fullTitle.value.length > 20)
+
+// 处理标题悬停
+const handleTitleHover = () => {
+  if (!isTitleTruncated.value) return
+  
+  showTitleTooltip.value = true
+  
+  // 计算tooltip位置
+  nextTick(() => {
+    if (titleRef.value) {
+      const rect = titleRef.value.getBoundingClientRect()
+      tooltipStyle.value = {
+        position: 'fixed',
+        top: `${rect.bottom + 8}px`,
+        left: `${rect.left}px`,
+        zIndex: 1001
+      }
+    }
+  })
+}
 
 // 获取当前AI配置
 const loadAIConfig = async () => {
@@ -177,7 +187,6 @@ const autoResize = () => {
 const createNewSession = () => {
   messages.value = []
   currentSessionId.value = null
-  streamingMessage.value = ''
   inputText.value = ''
   if (eventSource) {
     eventSource.close()
@@ -188,7 +197,6 @@ const createNewSession = () => {
 // 流式发送消息
 const sendMessageStream = async (userMessage, isTranslate = false) => {
   isLoading.value = true
-  streamingMessage.value = ''
   
   try {
     const url = isTranslate ? apiService.getTranslateStreamUrl() : apiService.getChatStreamUrl()
@@ -215,12 +223,36 @@ const sendMessageStream = async (userMessage, isTranslate = false) => {
     })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      // 尝试读取错误响应体
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+      try {
+        const errorData = await response.json()
+        if (errorData.error) {
+          errorMessage = errorData.error
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail
+        } else if (errorData.message) {
+          errorMessage = errorData.message
+        }
+      } catch (e) {
+        // 无法解析JSON，使用默认错误消息
+        console.error('无法解析错误响应:', e)
+      }
+      throw new Error(errorMessage)
     }
     
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let fullContent = ''
+    let streamError = null
+    
+    // 直接在messages数组中创建一条消息，然后实时更新
+    const messageIndex = messages.value.length
+    messages.value.push({
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      streaming: true  // 标记为流式输出中
+    })
     
     while (true) {
       const { done, value } = await reader.read()
@@ -236,48 +268,58 @@ const sendMessageStream = async (userMessage, isTranslate = false) => {
             const json = JSON.parse(data)
             
             if (json.type === 'chunk') {
-              streamingMessage.value += json.content
-              fullContent += json.content
+              // 直接更新messages中的消息内容
+              messages.value[messageIndex].content += json.content
               scrollToBottom()
             } else if (json.type === 'done') {
-              // 流式完成，添加到消息列表（使用累积的完整内容）
-              if (fullContent) {
-                messages.value.push({
-                  role: 'assistant',
-                  content: fullContent,
-                  timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-                })
-                currentSessionId.value = json.session_id
-                
-                // 等待DOM更新后再清空流式消息，避免闪烁
-                await nextTick()
-                // 额外延迟确保渲染完成
-                setTimeout(() => {
-                  streamingMessage.value = ''
-                  scrollToBottom()
-                }, 50)
-                fullContent = '' // 重置累积内容
-              }
+              // 流式完成，移除streaming标记
+              messages.value[messageIndex].streaming = false
+              currentSessionId.value = json.session_id
+              scrollToBottom()
             } else if (json.type === 'error') {
-              throw new Error(json.error)
+              // 保存错误信息并跳出循环
+              streamError = json.error
+              // 删除正在流式输出的消息
+              messages.value.splice(messageIndex, 1)
+              break
             }
           } catch (e) {
             console.error('Parse error:', e)
           }
         }
       }
+      
+      // 如果遇到错误，跳出外层循环
+      if (streamError) {
+        break
+      }
+    }
+    
+    // 如果有流式错误，抛出异常让外层catch处理
+    if (streamError) {
+      throw new Error(streamError)
     }
     
   } catch (error) {
     console.error('Stream error:', error)
+    
+    // 构建详细的错误信息
+    let errorMessage = '请求失败'
+    if (error.message) {
+      errorMessage = error.message
+    }
+    
+    // 如果是网络错误
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      errorMessage = '网络连接失败，请检查网络连接和后端服务是否正常运行'
+    }
+    
     messages.value.push({
       role: 'assistant',
-      content: `错误: ${error.message || '请求失败，请检查AI配置'}`,
-      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      content: `❌ 错误: ${errorMessage}\n\n请检查：\n1. AI配置是否正确\n2. 后端服务是否正常运行\n3. 网络连接是否正常`,
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      isError: true  // 标记为错误消息
     })
-    // 等待DOM更新后再清空
-    await nextTick()
-    streamingMessage.value = ''
   } finally {
     isLoading.value = false
     await nextTick()
@@ -320,18 +362,34 @@ const initTranslation = async () => {
   }
 }
 
-// 监听面板打开
-watch(() => props.modelValue, (newVal) => {
-  if (newVal) {
-    messages.value = []
-    inputText.value = ''
-    currentSessionId.value = null
-    streamingMessage.value = ''
-    loadAIConfig().then(() => {
-      initTranslation()
-    })
-  }
-})
+// 监听面板打开和模式变化
+watch([() => props.modelValue, () => props.mode, () => props.selectedText], 
+  ([newModelValue, newMode, newSelectedText], [oldModelValue, oldMode]) => {
+    // 只在以下情况触发：
+    // 1. 面板从关闭到打开（用户点击翻译按钮）
+    // 2. 面板已打开但模式变为'translate'（从聊天切换到翻译）
+    const panelJustOpened = newModelValue && !oldModelValue
+    const modeChangedToTranslate = newModelValue && newMode === 'translate' && oldMode !== 'translate'
+    
+    if (panelJustOpened || modeChangedToTranslate) {
+      // 翻译模式：直接追加翻译，不清空历史
+      if (newMode === 'translate' && newSelectedText) {
+        loadAIConfig().then(() => {
+          initTranslation()
+          lastTranslatedText.value = newSelectedText
+        })
+      } else if (newMode === 'chat') {
+        // 聊天模式不自动翻译
+        if (panelJustOpened) {
+          loadAIConfig().then(() => {
+            initTranslation()
+          })
+        }
+      }
+    }
+  },
+  { deep: false }
+)
 
 onUnmounted(() => {
   if (eventSource) {
@@ -372,7 +430,7 @@ onUnmounted(() => {
 
 .header-title {
   flex: 1;
-  cursor: pointer;
+  position: relative;
   overflow: hidden;
 }
 
@@ -388,6 +446,34 @@ onUnmounted(() => {
 
 .header-title:hover h3 {
   color: #3498db;
+}
+
+/* 标题tooltip */
+.title-tooltip {
+  background: white;
+  color: #2c3e50;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border: 1px solid #ecf0f1;
+  min-width: 200px;
+  max-width: 400px;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: tooltipFadeIn 0.2s ease;
+  pointer-events: none;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .header-actions {
@@ -502,7 +588,8 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-.ai-bubble {
+.ai-bubble,
+.assistant-bubble {
   background: #f8f9fa;
   color: #2c3e50;
   border: 1px solid #ecf0f1;
@@ -514,6 +601,13 @@ onUnmounted(() => {
   color: white;
   border-top-right-radius: 4px;
   margin-left: auto;
+}
+
+.error-bubble {
+  background: #ff4757 !important;
+  color: white !important;
+  border: 1px solid #ee5a6f !important;
+  font-weight: 500;
 }
 
 .streaming {
@@ -604,67 +698,4 @@ onUnmounted(() => {
   background: rgba(0, 0, 0, 0.3);
 }
 
-/* 标题弹窗 */
-.title-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.title-modal-content {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  max-width: 500px;
-  width: 90%;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  animation: slideUp 0.3s ease;
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.title-modal-content h4 {
-  margin: 0 0 16px 0;
-  color: #2c3e50;
-  font-size: 16px;
-  line-height: 1.6;
-  word-break: break-word;
-}
-
-.modal-close-btn {
-  background: #3498db;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s;
-}
-
-.modal-close-btn:hover {
-  background: #2980b9;
-}
 </style>

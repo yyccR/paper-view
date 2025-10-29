@@ -1890,3 +1890,29 @@
     border-color: #bdc3c7;
     color: #2c3e50;
 }
+
+/* 全局按钮和控件文本不可选择 */
+button,
+.btn,
+.btn-primary,
+.btn-secondary,
+.icon-btn,
+.close-btn,
+.send-btn,
+.search-btn,
+.upload-btn,
+.sel-btn,
+.lang-btn,
+.pagination-btn,
+.nav-item,
+.template-label,
+.provider-name,
+.model-name,
+.viz-btn,
+label,
+.nav-label {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}

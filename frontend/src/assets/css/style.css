@@ -643,3 +643,20 @@ body {
 .fade-in {
     animation: fadeIn 0.6s ease-out;
 }
+
+/* 全局按钮和控件文本不可选择 */
+button,
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-login,
+.upload-btn,
+.search-btn,
+.modal-close,
+a,
+label {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}

@@ -16,7 +16,7 @@
           <img :src="aiLogo" alt="AI" class="ai-logo">
         </div>
         <div class="message-content">
-          <div class="message-text">{{ msg.content }}</div>
+          <div class="message-text" :class="{ 'error-text': msg.isError }">{{ msg.content }}</div>
           <div class="message-time">{{ msg.timestamp }}</div>
         </div>
       </div>
@@ -175,10 +175,34 @@ const sendMessage = async () => {
     }
   } catch (error) {
     console.error('Error:', error)
+    
+    // 构建详细的错误信息
+    let errorMessage = '请求失败'
+    if (error.response && error.response.data) {
+      // Axios错误响应
+      if (error.response.data.error) {
+        errorMessage = error.response.data.error
+      } else if (error.response.data.detail) {
+        errorMessage = error.response.data.detail
+      } else if (error.response.data.message) {
+        errorMessage = error.response.data.message
+      } else {
+        errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`
+      }
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    // 如果是网络错误
+    if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
+      errorMessage = '网络连接失败，请检查网络连接和后端服务是否正常运行'
+    }
+    
     messages.value.push({
       role: 'assistant',
-      content: `错误: ${error.message || '请求失败，请检查AI配置'}`,
-      timestamp: formatTime()
+      content: `❌ 错误: ${errorMessage}\n\n请检查：\n1. AI配置是否正确\n2. 后端服务是否正常运行\n3. 网络连接是否正常`,
+      timestamp: formatTime(),
+      isError: true
     })
   } finally {
     isLoading.value = false
@@ -206,10 +230,32 @@ const initTranslation = async () => {
       }
     } catch (error) {
       console.error('Translation error:', error)
+      
+      // 构建详细的错误信息
+      let errorMessage = '翻译失败'
+      if (error.response && error.response.data) {
+        if (error.response.data.error) {
+          errorMessage = error.response.data.error
+        } else if (error.response.data.detail) {
+          errorMessage = error.response.data.detail
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message
+        } else {
+          errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
+        errorMessage = '网络连接失败，请检查网络连接和后端服务是否正常运行'
+      }
+      
       messages.value.push({
         role: 'assistant',
-        content: `错误: ${error.message || '翻译失败，请检查AI配置'}`,
-        timestamp: formatTime()
+        content: `❌ 错误: ${errorMessage}\n\n请检查：\n1. AI配置是否正确\n2. 后端服务是否正常运行\n3. 网络连接是否正常`,
+        timestamp: formatTime(),
+        isError: true
       })
     } finally {
       isLoading.value = false
@@ -374,6 +420,13 @@ watch(() => props.modelValue, (newVal) => {
   background: #3498db;
   color: white;
   margin-left: auto;
+}
+
+.error-text {
+  background: #ff4757 !important;
+  color: white !important;
+  border: 1px solid #ee5a6f !important;
+  font-weight: 500;
 }
 
 .message-time {

@@ -563,6 +563,39 @@ const updateSelectionFromWindow = (doc) => {
     }
     const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null
     if (!range) return
+    
+    // 检查选中的文本是否在PDF文档区域内
+    const isInPdfArea = () => {
+      // 如果doc不是主文档（即在iframe内），直接允许
+      if (doc !== window.document) {
+        return true
+      }
+      
+      // 如果是在主文档，检查选中文本的容器元素
+      let container = range.commonAncestorContainer
+      if (container.nodeType === Node.TEXT_NODE) {
+        container = container.parentElement
+      }
+      
+      // 检查是否在.pdf-viewer, .pdf-canvas-container或.preview-content区域内
+      if (container && container.closest) {
+        return !!(container.closest('.pdf-viewer') || 
+                 container.closest('.pdf-canvas-container') || 
+                 container.closest('.preview-content'))
+      }
+      
+      return false
+    }
+    
+    // 如果不在PDF文档区域内，不显示弹窗
+    if (!isInPdfArea()) {
+      if (!(interactingToolbar.value || showLangMenu.value)) {
+        selectionText.value = ''
+        showSelectionActions.value = false
+      }
+      return
+    }
+    
     const rect = range.getBoundingClientRect()
     if (!rect || (rect.width === 0 && rect.height === 0)) return
     selectionText.value = text
@@ -605,9 +638,17 @@ const handleCopy = async () => {
 }
 
 const handleTranslate = () => {
-  // 打开翻译模式的聊天面板
-  chatMode.value = 'translate'
-  showTranslateChat.value = true
+  // 如果面板已打开且是翻译模式，临时切换模式来触发新翻译
+  if (showTranslateChat.value && chatMode.value === 'translate') {
+    chatMode.value = 'chat'
+    nextTick(() => {
+      chatMode.value = 'translate'
+    })
+  } else {
+    // 打开翻译模式的聊天面板
+    chatMode.value = 'translate'
+    showTranslateChat.value = true
+  }
   // 不清除选择文本，保持浮层可见直到面板打开后
   setTimeout(() => {
     clearSelectionActions()

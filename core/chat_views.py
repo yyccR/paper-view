@@ -426,7 +426,13 @@ def translate_stream(request):
         return response
         
     except Exception as e:
-        return StreamingHttpResponse(f'{{"error": "{str(e)}"}}', status=500)
+        print(f"Translate stream error: {e}")
+        def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        response = StreamingHttpResponse(error_stream(), content_type='text/event-stream')
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
 
 
 @csrf_exempt
@@ -521,7 +527,13 @@ def chat_stream(request):
         return response
         
     except Exception as e:
-        return StreamingHttpResponse(f'{{"error": "{str(e)}"}}', status=500)
+        print(f"Chat stream error: {e}")
+        def error_stream():
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        response = StreamingHttpResponse(error_stream(), content_type='text/event-stream')
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
 
 
 @csrf_exempt
