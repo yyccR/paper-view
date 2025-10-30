@@ -1,5 +1,8 @@
 <template>
-  <div class="translate-chat-panel" :class="{ active: modelValue }">
+  <div class="translate-chat-panel" :class="{ active: modelValue }" :style="{ width: panelWidth + 'px' }">
+    <!-- 拖动手柄 -->
+    <div class="resize-handle" ref="resizeHandle" @pointerdown="startResize"></div>
+    
     <!-- 头部 -->
     <div class="chat-header">
       <div class="header-title" @mouseenter="handleTitleHover" @mouseleave="showTitleTooltip = false" ref="titleRef">
@@ -65,7 +68,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { apiService } from '@/api'
 
 const props = defineProps({
@@ -85,10 +88,18 @@ const props = defineProps({
   paperTitle: {
     type: String,
     default: ''
+  },
+  sessionId: {
+    type: Number,
+    default: null
+  },
+  sessionMessages: {
+    type: Array,
+    default: () => []
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'sessionClosed'])
+const emit = defineEmits(['update:modelValue', 'sessionClosed', 'widthChanged'])
 
 const messages = ref([])
 const inputText = ref('')
@@ -102,6 +113,15 @@ const tooltipStyle = ref({})
 const currentSessionId = ref(null)
 const lastTranslatedText = ref('')  // 记录上次翻译的文本
 let eventSource = null
+
+// 面板宽度调整
+const panelWidth = ref(280)
+// 默认宽度即最小宽度：不支持比默认更小
+const minWidth = 280
+const maxWidth = 600
+const isResizing = ref(false)
+const resizeHandle = ref(null)
+let activePointerId = null
 
 // 标题处理
 const fullTitle = computed(() => props.paperTitle || '新对话')
@@ -148,8 +168,10 @@ const loadAIConfig = async () => {
 
 // AI Logo
 const aiLogo = computed(() => {
-  if (currentAIConfig.value && currentAIConfig.value.provider) {
-    return `/assets/logos/${currentAIConfig.value.provider}.png`
+  if (currentAIConfig.value) {
+    // 优先使用logo字段，如果没有则使用provider
+    const logoName = currentAIConfig.value.logo || currentAIConfig.value.provider || 'openai'
+    return `/assets/logos/${logoName}.png`
   }
   return '/assets/logos/openai.png'
 })
@@ -191,6 +213,11 @@ const createNewSession = () => {
   if (eventSource) {
     eventSource.close()
     eventSource = null
+  }
+  // 如果是翻译模式且有选中文本，自动开始新一轮翻译
+  if (props.mode === 'translate' && props.selectedText) {
+    // 使用流式翻译，开始新的助理消息输出
+    sendMessageStream(props.selectedText, true)
   }
 }
 
@@ -362,6 +389,44 @@ const initTranslation = async () => {
   }
 }
 
+// 加载历史会话消息
+const loadSessionMessages = () => {
+  if (props.sessionId && props.sessionMessages && props.sessionMessages.length > 0) {
+    // 清空当前消息
+    messages.value = []
+    
+    // 加载历史消息
+    props.sessionMessages.forEach(msg => {
+      messages.value.push({
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      })
+    })
+    
+    // 设置当前会话ID
+    currentSessionId.value = props.sessionId
+    
+    // 滚动到底部
+    scrollToBottom()
+  }
+}
+
+// 监听会话ID变化，加载历史消息
+watch(() => props.sessionId, (newSessionId, oldSessionId) => {
+  if (newSessionId && newSessionId !== oldSessionId) {
+    loadSessionMessages()
+  }
+})
+
+// 监听面板打开，通知父组件初始宽度
+watch(() => props.modelValue, (newVal) => {
+  if (newVal) {
+    // 面板打开时，通知父组件当前宽度
+    emit('widthChanged', panelWidth.value)
+  }
+})
+
 // 监听面板打开和模式变化
 watch([() => props.modelValue, () => props.mode, () => props.selectedText], 
   ([newModelValue, newMode, newSelectedText], [oldModelValue, oldMode]) => {
@@ -371,25 +436,104 @@ watch([() => props.modelValue, () => props.mode, () => props.selectedText],
     const panelJustOpened = newModelValue && !oldModelValue
     const modeChangedToTranslate = newModelValue && newMode === 'translate' && oldMode !== 'translate'
     
+    // 每次面板打开时都重新加载AI配置，确保logo是最新的
+    if (panelJustOpened) {
+      loadAIConfig()
+      
+      // 如果有会话ID，加载历史消息
+      if (props.sessionId) {
+        loadSessionMessages()
+        return // 加载历史消息后不执行下面的逻辑
+      }
+    }
+    
     if (panelJustOpened || modeChangedToTranslate) {
       // 翻译模式：直接追加翻译，不清空历史
       if (newMode === 'translate' && newSelectedText) {
-        loadAIConfig().then(() => {
-          initTranslation()
-          lastTranslatedText.value = newSelectedText
-        })
+        initTranslation()
+        lastTranslatedText.value = newSelectedText
       } else if (newMode === 'chat') {
         // 聊天模式不自动翻译
         if (panelJustOpened) {
-          loadAIConfig().then(() => {
-            initTranslation()
-          })
+          initTranslation()
         }
       }
     }
   },
   { deep: false }
 )
+
+// 组件挂载时加载AI配置
+onMounted(() => {
+  loadAIConfig()
+})
+
+// 拖动调整宽度（Pointer Events + pointer capture，更丝滑且不易断触）
+const startResize = (e) => {
+  // 仅处理指针事件
+  if (!(e && 'pointerId' in e)) return
+  e.preventDefault()
+  e.stopPropagation()
+
+  isResizing.value = true
+  activePointerId = e.pointerId
+
+  const startX = e.clientX
+  const startWidth = panelWidth.value
+
+  // rAF 节流，避免频繁布局抖动
+  let rafPending = false
+  let targetWidth = startWidth
+
+  const applyWidth = (w) => {
+    panelWidth.value = w
+    emit('widthChanged', w)
+  }
+
+  const onPointerMove = (evt) => {
+    if (!isResizing.value) return
+    const deltaX = evt.clientX - startX
+    const desired = Math.min(Math.max(startWidth + deltaX, minWidth), maxWidth)
+    targetWidth = desired
+    if (!rafPending) {
+      rafPending = true
+      requestAnimationFrame(() => {
+        rafPending = false
+        applyWidth(targetWidth)
+      })
+    }
+  }
+
+  const finish = () => {
+    isResizing.value = false
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
+    window.removeEventListener('pointercancel', onPointerCancel)
+    try {
+      if (resizeHandle.value && activePointerId != null) {
+        resizeHandle.value.releasePointerCapture(activePointerId)
+      }
+    } catch {}
+    activePointerId = null
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  const onPointerUp = () => finish()
+  const onPointerCancel = () => finish()
+
+  try {
+    if (resizeHandle.value) {
+      resizeHandle.value.setPointerCapture(activePointerId)
+    }
+  } catch {}
+
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerCancel)
+  document.body.style.cursor = 'ew-resize'
+  document.body.style.userSelect = 'none'
+}
 
 onUnmounted(() => {
   if (eventSource) {
@@ -403,7 +547,6 @@ onUnmounted(() => {
   position: fixed;
   left: 70px;
   top: 0;
-  width: 280px;
   height: 100vh;
   background: white;
   box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
@@ -416,6 +559,51 @@ onUnmounted(() => {
 
 .translate-chat-panel.active {
   transform: translateX(0);
+}
+
+/* 拖动手柄 */
+.resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  transition: background 0.2s;
+  z-index: 10;
+  /* 防止在触摸设备上触发滚动/缩放手势，避免断触 */
+  touch-action: none;
+  /* 防止拖动时选中文本导致松手 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 40px;
+  background: rgba(52, 152, 219, 0.2);
+  border-radius: 1px;
+  transition: all 0.2s;
+}
+
+.resize-handle:hover::before {
+  background: rgba(52, 152, 219, 0.5);
+  height: 60px;
+}
+
+.resize-handle:active {
+  background: rgba(52, 152, 219, 0.1);
+}
+
+.resize-handle:active::before {
+  background: rgba(52, 152, 219, 0.8);
+  height: 80px;
 }
 
 .chat-header {
@@ -564,18 +752,18 @@ onUnmounted(() => {
   height: 28px;
   border-radius: 50%;
   overflow: hidden;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 5px;
+  border: 1px solid #ecf0f1;
 }
 
 .ai-logo {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: brightness(0) invert(1);
 }
 
 .message-bubble {

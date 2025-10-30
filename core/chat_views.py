@@ -496,14 +496,20 @@ def chat_stream(request):
                         context_text=context_text
                     )
                 
-                # 保存用户消息
-                for msg in messages:
+                # 保存用户消息：只保存最新的一条（避免重复保存历史消息）
+                # 前端发送的messages包含所有历史消息，我们只需要保存新发送的最后一条user消息
+                last_user_message = None
+                for msg in reversed(messages):
                     if msg['role'] == 'user':
-                        ChatMessage.objects.create(
-                            session=session,
-                            role='user',
-                            content=msg['content']
-                        )
+                        last_user_message = msg
+                        break
+                
+                if last_user_message:
+                    ChatMessage.objects.create(
+                        session=session,
+                        role='user',
+                        content=last_user_message['content']
+                    )
                 
                 # 保存AI回复
                 ChatMessage.objects.create(
@@ -572,6 +578,9 @@ def session_manage(request, session_id=None):
             else:
                 sessions = ChatSession.objects.filter(session_id=sess_id, is_active=True)
             
+            # 明确排序，避免不同数据库对NULL排序行为差异导致的顺序不稳定
+            sessions = sessions.order_by('-is_pinned', '-last_message_at', '-created_at')
+            
             session_list = sessions.values(
                 'id', 'title', 'paper_title', 'session_type', 'message_count', 
                 'last_message_at', 'created_at', 'is_pinned'
@@ -612,7 +621,7 @@ def session_manage(request, session_id=None):
         if not session:
             return Response({'success': False, 'error': 'Session not found'}, status=404)
         
-        session.is_active = False
-        session.save()
+        # 硬删除：连带删除关联消息（on_delete=CASCADE）
+        session.delete()
         
         return Response({'success': True})

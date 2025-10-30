@@ -12,7 +12,8 @@ export default {
     viewMore: 'View More',
     total: 'Total',
     items: 'items',
-    pages: 'pages'
+    pages: 'pages',
+    locale: 'en-US'
   },
   
   header: {
@@ -92,7 +93,21 @@ export default {
       chatHistory: 'Chat History',
       analysisComplete: 'Paper analysis completed',
       minutesAgo: '{count} minutes ago',
-      noSessions: 'No chat sessions'
+      noSessions: 'No chat sessions',
+      messageCount: '{count} messages',
+      deleteSession: 'Delete session',
+      confirmDelete: 'Are you sure you want to delete this session?',
+      deleteFailed: 'Failed to delete, please try again',
+      sessionType: {
+        translate: 'Translation',
+        chat: 'Chat'
+      },
+      time: {
+        justNow: 'Just now',
+        minutesAgo: '{count} minutes ago',
+        hoursAgo: '{count} hours ago',
+        daysAgo: '{count} days ago'
+      }
     },
     
     // User panel
@@ -308,11 +323,11 @@ export default {
     copy: 'Copy',
     language: 'Language',
     lang: {
-      zh: '中文',
+      zh: 'Chinese',
       en: 'English',
-      ja: '日本語',
-      ko: '한국어',
-      es: 'Español'
+      ja: 'Japanese',
+      ko: 'Korean',
+      es: 'Spanish'
     }
   },
   

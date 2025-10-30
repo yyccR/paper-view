@@ -63,7 +63,7 @@
     <div class="notification-panel" :class="{ active: showNotificationPanel }">
       <div class="notification-header">
         <h3>{{ $t('workspace.notification.title') }}</h3>
-        <button class="close-btn" @click="showNotificationPanel = false">&times;</button>
+        <button class="close-btn" @click="handleNotificationClose">&times;</button>
       </div>
       <div class="notification-list">
         <div 
@@ -81,12 +81,21 @@
             <p class="session-title">{{ session.title }}</p>
             <div class="session-meta">
               <span class="session-type" :class="`type-${session.session_type}`">
-                {{ session.session_type === 'translate' ? '翻译' : '对话' }}
+                {{ $t(`workspace.notification.sessionType.${session.session_type}`) }}
               </span>
-              <span class="session-count">{{ session.message_count }} 条消息</span>
+              <span class="session-count">{{ $t('workspace.notification.messageCount', { count: session.message_count }) }}</span>
             </div>
             <span class="session-time">{{ formatTime(session.last_message_at || session.created_at) }}</span>
           </div>
+          <button 
+            class="delete-session-btn" 
+            @click.stop="deleteSession(session.id)"
+            :title="$t('workspace.notification.deleteSession')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
         <div v-if="chatSessions.length === 0" class="empty-state">
           <p>{{ $t('workspace.notification.noSessions') }}</p>
@@ -118,7 +127,10 @@
       :targetLang="selectedLang"
       :mode="chatMode"
       :paperTitle="selectedPaperTitle"
+      :sessionId="currentOpenSessionId"
+      :sessionMessages="currentSessionMessages"
       @sessionClosed="handleSessionClosed"
+      @widthChanged="handleChatPanelWidthChange"
     />
 
     <!-- AI模型配置面板 -->
@@ -279,7 +291,7 @@
     </div>
 
     <!-- 主工作区 -->
-    <main class="workspace">
+    <main class="workspace" :style="workspaceStyle">
       <!-- 顶部搜索区域 -->
       <div class="workspace-header" v-show="!showPdfPreview">
         <div class="search-wrapper">
@@ -461,7 +473,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiService } from '@/api'
@@ -526,6 +538,12 @@ const selectedLang = ref('zh')
 const showTranslateChat = ref(false)
 const chatMode = ref('translate') // 'translate' or 'chat'
 const chatSessions = ref([]) // 会话历史
+const currentOpenSessionId = ref(null) // 当前打开的会话ID
+const currentSessionMessages = ref([]) // 当前会话的消息列表
+const chatPanelWidth = ref(280) // 聊天面板宽度
+
+// 模板侧边栏固定宽度（需与 CSS `.template-sidebar` 的宽度保持一致）
+const TEMPLATE_SIDEBAR_WIDTH = 280
 
 const getViewportClampedPos = (baseTop, baseLeft, selWidth) => {
   const margin = 8
@@ -638,6 +656,10 @@ const handleCopy = async () => {
 }
 
 const handleTranslate = () => {
+  // 清空历史会话数据，开始新对话
+  currentOpenSessionId.value = null
+  currentSessionMessages.value = []
+  
   // 如果面板已打开且是翻译模式，临时切换模式来触发新翻译
   if (showTranslateChat.value && chatMode.value === 'translate') {
     chatMode.value = 'chat'
@@ -656,6 +678,10 @@ const handleTranslate = () => {
 }
 
 const handleAsk = () => {
+  // 清空历史会话数据，开始新对话
+  currentOpenSessionId.value = null
+  currentSessionMessages.value = []
+  
   // 打开聊天模式的面板
   chatMode.value = 'chat'
   showTranslateChat.value = true
@@ -1163,7 +1189,8 @@ const closeAllPanels = () => {
   showNotificationPanel.value = false
   showUserPanel.value = false
   showAIPanel.value = false
-  showTemplatePanel.value = false
+  // 关闭所有面板后，显示主页面板
+  showTemplatePanel.value = true
 }
 
 // 处理各个按钮的点击事件
@@ -1196,6 +1223,10 @@ const handleNotificationToggle = () => {
   showAIPanel.value = false
   showTemplatePanel.value = false
   showUserPanel.value = false
+  // 关闭聊天窗口
+  showTranslateChat.value = false
+  // 刷新会话列表
+  loadChatSessions()
 }
 
 const handleUserToggle = () => {
@@ -1204,6 +1235,51 @@ const handleUserToggle = () => {
   showTemplatePanel.value = false
   showNotificationPanel.value = false
 }
+
+const handleNotificationClose = () => {
+  showNotificationPanel.value = false
+  // 关闭通知面板后，显示主页面板
+  showTemplatePanel.value = true
+}
+
+const handleChatPanelWidthChange = (width) => {
+  chatPanelWidth.value = width
+}
+
+// 防守式：面板打开后以 DOM 实际宽度为准，避免偶发的旧值导致间隙
+watch(showTranslateChat, (val) => {
+  if (val) {
+    nextTick(() => {
+      try {
+        const el = document.querySelector('.translate-chat-panel.active') || document.querySelector('.translate-chat-panel')
+        if (el) {
+          const w = Math.round(el.getBoundingClientRect().width)
+          if (w && w !== chatPanelWidth.value) {
+            chatPanelWidth.value = w
+          }
+        }
+      } catch {}
+    })
+  }
+})
+
+// 计算主工作区的样式
+const workspaceStyle = computed(() => {
+  // 模板侧边栏隐藏时需要补偿其宽度，避免主工作区左移到固定面板下方
+  const templateMargin = showTemplatePanel.value ? 0 : TEMPLATE_SIDEBAR_WIDTH
+  
+  // 聊天面板打开时，如果宽度超过模板侧边栏，需要额外让出空间
+  const chatMargin = showTranslateChat.value 
+    ? Math.max(0, chatPanelWidth.value - TEMPLATE_SIDEBAR_WIDTH) 
+    : 0
+  
+  const totalMargin = templateMargin + chatMargin
+  
+  return {
+    marginLeft: `${totalMargin}px`,
+    transition: 'margin-left 0.3s ease'
+  }
+})
 
 // AI模型配置相关方法
 const loadAIOptions = async () => {
@@ -1360,13 +1436,16 @@ const openSession = async (sessionId) => {
       const session = response.data.session
       const sessionMessages = response.data.messages
       
-      // 设置会话信息（后续可以传递给TranslateChat组件）
       console.log('加载会话:', session.title, sessionMessages.length, '条消息')
       
-      // TODO: 需要扩展TranslateChat组件以支持加载历史会话
-      // 目前先打开空白聊天面板
-      showTranslateChat.value = true
+      // 设置会话数据
+      currentOpenSessionId.value = sessionId
+      currentSessionMessages.value = sessionMessages
+      selectedPaperTitle.value = session.paper_title || session.title
       chatMode.value = session.session_type === 'translate' ? 'translate' : 'chat'
+      
+      // 打开聊天面板
+      showTranslateChat.value = true
       
       // 关闭通知面板
       showNotificationPanel.value = false
@@ -1374,8 +1453,27 @@ const openSession = async (sessionId) => {
   } catch (error) {
     console.error('加载会话失败:', error)
     // 即使加载失败，也打开聊天面板
+    currentOpenSessionId.value = null
+    currentSessionMessages.value = []
     showTranslateChat.value = true
     showNotificationPanel.value = false
+  }
+}
+
+const deleteSession = async (sessionId) => {
+  if (!confirm(t('workspace.notification.confirmDelete'))) {
+    return
+  }
+  
+  try {
+    const response = await apiService.deleteSession(sessionId)
+    if (response.success) {
+      // 从列表中移除
+      chatSessions.value = chatSessions.value.filter(s => s.id !== sessionId)
+    }
+  } catch (error) {
+    console.error('删除会话失败:', error)
+    alert(t('workspace.notification.deleteFailed'))
   }
 }
 
@@ -1388,11 +1486,11 @@ const formatTime = (dateString) => {
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
   
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  if (minutes < 1) return t('workspace.notification.time.justNow')
+  if (minutes < 60) return t('workspace.notification.time.minutesAgo', { count: minutes })
+  if (hours < 24) return t('workspace.notification.time.hoursAgo', { count: hours })
+  if (days < 7) return t('workspace.notification.time.daysAgo', { count: days })
+  return date.toLocaleDateString(t('common.locale'), { month: 'short', day: 'numeric' })
 }
 
 onMounted(() => {

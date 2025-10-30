@@ -276,6 +276,7 @@
     cursor: pointer;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    position: relative;
 }
 
 .session-item:hover {
@@ -298,6 +299,35 @@
 .session-content {
     flex: 1;
     min-width: 0;
+}
+
+/* 删除会话按钮 */
+.delete-session-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+    border-radius: 50%;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.session-item:hover .delete-session-btn {
+    display: flex;
+}
+
+.delete-session-btn:hover {
+    background: #e74c3c;
+    color: white;
+    transform: scale(1.1);
 }
 
 .session-title {
@@ -1049,20 +1079,22 @@
 
 /* 可视化模板边栏 - 固定在导航栏右侧 */
 .template-sidebar {
-    width: 280px;
+    /* 隐藏时不占用布局宽度，避免与聊天面板之间出现空白 */
+    width: 0;
     background: white;
-    border-right: 1px solid #ecf0f1;
+    border-right: none;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    overflow: hidden; /* 配合宽度动画裁剪内容 */
     flex-shrink: 0;
     z-index: 1;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
+    transition: width 0.3s ease;
 }
 
 .template-sidebar.active {
-    transform: translateX(0);
+    width: 280px;
+    border-right: 1px solid #ecf0f1;
 }
 
 .template-header {

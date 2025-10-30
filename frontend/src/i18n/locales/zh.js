@@ -12,7 +12,8 @@ export default {
     viewMore: '查看更多',
     total: '共',
     items: '条',
-    pages: '页'
+    pages: '页',
+    locale: 'zh-CN'
   },
   
   header: {
@@ -92,7 +93,21 @@ export default {
       chatHistory: '对话历史',
       analysisComplete: '论文分析完成',
       minutesAgo: '{count}分钟前',
-      noSessions: '暂无对话记录'
+      noSessions: '暂无对话记录',
+      messageCount: '{count} 条消息',
+      deleteSession: '删除会话',
+      confirmDelete: '确定要删除这个会话吗？',
+      deleteFailed: '删除失败，请重试',
+      sessionType: {
+        translate: '翻译',
+        chat: '对话'
+      },
+      time: {
+        justNow: '刚刚',
+        minutesAgo: '{count}分钟前',
+        hoursAgo: '{count}小时前',
+        daysAgo: '{count}天前'
+      }
     },
     
     // 用户面板
@@ -309,10 +324,10 @@ export default {
     language: '切换语言',
     lang: {
       zh: '中文',
-      en: 'English',
-      ja: '日本語',
-      ko: '한국어',
-      es: 'Español'
+      en: '英语',
+      ja: '日语',
+      ko: '韩语',
+      es: '西班牙语'
     }
   },
   

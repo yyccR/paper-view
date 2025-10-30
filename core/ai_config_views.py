@@ -28,6 +28,17 @@ API_KEY_ENV_MAP = {
     'deepseek': 'DEEPSEEK_API_KEY',
 }
 
+# Provider到Logo文件名的映射
+PROVIDER_LOGO_MAP = {
+    'gpt': 'gpt',
+    'claude': 'claude',
+    'gemini': 'gemini',
+    'qwen': 'qwen',
+    'grok': 'grok',
+    'doubao': 'doubao',
+    'deepseek': 'deepseek',
+}
+
 def get_api_key(provider):
     """从环境变量获取API Key"""
     env_var = API_KEY_ENV_MAP.get(provider)
@@ -58,12 +69,16 @@ def ai_model_config(request):
                 config = AIModelConfig.objects.filter(session_id=session_id, is_active=True).first()
             
             if config:
+                # 获取logo名称
+                logo = PROVIDER_LOGO_MAP.get(config.provider, config.provider)
+                
                 return Response({
                     'success': True,
                     'data': {
                         'provider': config.provider,
                         'model_name': config.model_name,
                         'api_base': config.api_base,
+                        'logo': logo,
                     }
                 })
             else:
@@ -111,12 +126,16 @@ def ai_model_config(request):
                 }
             )
             
+            # 获取logo名称
+            logo = PROVIDER_LOGO_MAP.get(config.provider, config.provider)
+            
             return Response({
                 'success': True,
                 'data': {
                     'provider': config.provider,
                     'model_name': config.model_name,
                     'api_base': config.api_base,
+                    'logo': logo,
                 }
             })
         except Exception as e:

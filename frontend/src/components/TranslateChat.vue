@@ -98,8 +98,10 @@ const loadAIConfig = async () => {
 
 // AI Logo - 使用配置的AI模型logo
 const aiLogo = computed(() => {
-  if (currentAIConfig.value && currentAIConfig.value.provider) {
-    return `/assets/logos/${currentAIConfig.value.provider}.png`
+  if (currentAIConfig.value) {
+    // 优先使用logo字段，如果没有则使用provider
+    const logoName = currentAIConfig.value.logo || currentAIConfig.value.provider || 'openai'
+    return `/assets/logos/${logoName}.png`
   }
   // 默认使用通用AI图标
   return '/assets/logos/openai.png'
@@ -383,18 +385,18 @@ watch(() => props.modelValue, (newVal) => {
   height: 36px;
   border-radius: 50%;
   overflow: hidden;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 6px;
+  border: 1px solid #ecf0f1;
 }
 
 .ai-logo {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: brightness(0) invert(1);
 }
 
 .message-content {
