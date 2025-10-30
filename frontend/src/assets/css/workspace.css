@@ -1085,8 +1085,7 @@
     border-right: none;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    overflow: hidden; /* 配合宽度动画裁剪内容 */
+    overflow: hidden; /* 隐藏时裁剪内容，配合宽度动画 */
     flex-shrink: 0;
     z-index: 1;
     transition: width 0.3s ease;
@@ -1095,6 +1094,8 @@
 .template-sidebar.active {
     width: 280px;
     border-right: 1px solid #ecf0f1;
+    overflow-y: auto; /* 激活后允许垂直滚动 */
+    overflow-x: hidden; /* 始终隐藏横向滚动 */
 }
 
 .template-header {
