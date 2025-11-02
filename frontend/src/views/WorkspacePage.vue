@@ -292,8 +292,8 @@
 
     <!-- 主工作区 -->
     <main class="workspace" :style="workspaceStyle">
-      <!-- 顶部搜索区域 -->
-      <div class="workspace-header" v-show="!showPdfPreview">
+      <!-- 顶部搜索区域（仅在上传文件预览或未预览时显示） -->
+      <div class="workspace-header" v-show="!showPdfPreview || isUploadedFile">
         <div class="search-wrapper">
           <button class="upload-btn" @click="triggerFileUpload" :title="$t('workspace.uploadPdf')">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -320,9 +320,9 @@
         </div>
       </div>
 
-      <!-- PDF预览区域 -->
+      <!-- 文件预览区域 -->
       <div class="pdf-preview-section" v-if="showPdfPreview" :class="{ 'pdf-collapsed': showVisualization && !pdfExpanded }">
-        <!-- PDF内容区域 -->
+        <!-- 文件内容区域 -->
         <div class="preview-content" :class="{ 'pdf-expanded': pdfExpanded }" ref="previewContent">
           <!-- 圆形进度加载 -->
           <div v-if="isDownloading" class="pdf-loading">
@@ -336,16 +336,130 @@
             </div>
           </div>
 
-          <!-- PDF.js 画布预览 -->
-          <div v-if="!showVisualization" class="pdf-viewer" style="width:100%; height:100%; overflow: auto;">
-            <template v-if="!useIframeFallback">
-              <div ref="pdfContainer" class="pdf-canvas-container"></div>
-              <p v-if="!isDownloading && !pdfBlobUrl" style="color:#95a5a6;">准备预览PDF...</p>
-            </template>
+          <!-- PDF 预览 -->
+          <div v-if="!showVisualization && currentFileType === 'pdf'" class="pdf-viewer" style="width:100%; height:100%; overflow: auto;">
+            <!-- 下载错误提示 -->
+            <div v-if="downloadError" class="download-error">
+              <svg width="80" height="80" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#e74c3c" stroke-width="2"/>
+                <path d="M12 8V12M12 16H12.01" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <h3>{{ downloadError }}</h3>
+              <p>请检查网络连接或稍后重试</p>
+            </div>
+            <!-- PDF 正常预览 -->
             <template v-else>
-              <iframe v-if="viewerSrc" ref="viewerFrame" :src="viewerSrc" @load="onViewerLoaded" style="border:none; width:100%; height:100%;"></iframe>
-              <p v-else style="color:#95a5a6;">准备预览PDF...</p>
+              <template v-if="!useIframeFallback">
+                <div ref="pdfContainer" class="pdf-canvas-container"></div>
+                <p v-if="!isDownloading && !pdfBlobUrl" style="color:#95a5a6;">准备预览PDF...</p>
+              </template>
+              <template v-else>
+                <iframe v-if="viewerSrc" ref="viewerFrame" :src="viewerSrc" @load="onViewerLoaded" style="border:none; width:100%; height:100%;"></iframe>
+                <p v-else style="color:#95a5a6;">准备预览PDF...</p>
+              </template>
             </template>
+          </div>
+          
+          <!-- Word 预览 -->
+          <div v-if="!showVisualization && currentFileType === 'word'" class="word-preview" style="width:100%; height:100%; display: flex; flex-direction: column;">
+            <!-- 顶部工具栏 -->
+            <div class="file-toolbar">
+              <div class="toolbar-left">
+                <button class="toolbar-btn" @click="closePdfPreview" title="返回列表">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  返回
+                </button>
+                <div class="toolbar-sep"></div>
+                <span class="file-title">{{ selectedPaperTitle }}</span>
+              </div>
+            </div>
+            <!-- 内容区域 -->
+            <div class="word-viewer" style="flex: 1; overflow: auto; background: #f8f9fa;">
+              <div class="word-container">
+                <div v-if="filePreviewContent" v-html="filePreviewContent" class="word-content"></div>
+                <p v-else class="loading-text">加载中...</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Excel 预览 -->
+          <div v-if="!showVisualization && currentFileType === 'excel'" class="excel-preview" style="width:100%; height:100%; display: flex; flex-direction: column;">
+            <!-- 顶部工具栏 -->
+            <div class="file-toolbar">
+              <div class="toolbar-left">
+                <button class="toolbar-btn" @click="closePdfPreview" title="返回列表">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  返回
+                </button>
+                <div class="toolbar-sep"></div>
+                <span class="file-title">{{ selectedPaperTitle }}</span>
+              </div>
+            </div>
+            <!-- Excel Sheet 标签页 -->
+            <div class="excel-tabs" v-if="excelData && excelData.sheets" style="display: flex; gap: 4px; padding: 12px 16px 0; background: white; border-bottom: 1px solid #e0e0e0;">
+              <button 
+                v-for="(sheet, index) in excelData.sheets" 
+                :key="sheet"
+                :class="['excel-tab', { active: currentExcelSheet === index }]"
+                @click="currentExcelSheet = index"
+                style="padding: 8px 16px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 13px; color: #7f8c8d; transition: all 0.2s;"
+              >
+                {{ sheet }}
+              </button>
+            </div>
+            <div class="excel-content" v-if="currentSheetData" style="flex: 1; overflow: auto; padding: 24px;">
+              <div class="excel-content-wrapper">
+                <div class="table-wrapper" style="overflow-x: auto;">
+                  <table class="excel-table" style="width: 100%; border-collapse: collapse; font-size: 13px; background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                  <thead style="background: #f8f9fa; position: sticky; top: 0; z-index: 10;">
+                    <tr>
+                      <th v-for="(col, idx) in currentSheetData.columns" :key="idx" style="padding: 12px; text-align: left; font-weight: 600; color: #2c3e50; border: 1px solid #e0e0e0; white-space: nowrap;">
+                        {{ col }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rowIdx) in currentSheetData.data" :key="rowIdx" style="transition: background 0.2s;">
+                      <td v-for="(cell, cellIdx) in row" :key="cellIdx" style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #34495e;">
+                        {{ cell !== null ? cell : '' }}
+                      </td>
+                    </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="excel-info" style="margin-top: 12px; padding: 8px 12px; background: white; border-radius: 6px; font-size: 12px; color: #7f8c8d; text-align: center; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);">
+                  {{ currentSheetData.rows }} 行 × {{ currentSheetData.cols }} 列
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- TXT 预览 -->
+          <div v-if="!showVisualization && currentFileType === 'text'" class="text-preview" style="width:100%; height:100%; display: flex; flex-direction: column;">
+            <!-- 顶部工具栏 -->
+            <div class="file-toolbar">
+              <div class="toolbar-left">
+                <button class="toolbar-btn" @click="closePdfPreview" title="返回列表">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  返回
+                </button>
+                <div class="toolbar-sep"></div>
+                <span class="file-title">{{ selectedPaperTitle }}</span>
+              </div>
+            </div>
+            <!-- 内容区域 -->
+            <div class="text-viewer" style="flex: 1; overflow: auto; background: #f8f9fa;">
+              <div class="text-container">
+                <pre v-if="filePreviewContent" class="text-content">{{ filePreviewContent }}</pre>
+                <p v-else class="loading-text">加载中...</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -468,7 +582,26 @@
     </main>
 
     <!-- 隐藏的文件上传输入 -->
-    <input type="file" ref="fileInput" accept=".pdf" style="display: none;" @change="handleFileUpload">
+    <input type="file" ref="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" style="display: none;" @change="handleFileUpload">
+    
+    <!-- 文件上传Loading弹窗 -->
+    <Teleport to="body">
+      <div v-if="showUploadModal" class="upload-modal-overlay" @click.self="">
+        <div class="upload-modal">
+          <div class="upload-modal-content">
+            <div class="circle-wrapper">
+              <svg class="progress-ring" width="120" height="120">
+                <circle class="progress-ring__background" stroke="#ecf0f1" stroke-width="10" fill="transparent" r="52" cx="60" cy="60" />
+                <circle class="progress-ring__progress" :stroke="progressColor" stroke-width="10" fill="transparent" r="52" cx="60" cy="60"
+                        :style="{ strokeDasharray: circumference, strokeDashoffset: uploadDashOffset }" stroke-linecap="round" />
+              </svg>
+              <div class="progress-text">{{ uploadProgress }}%</div>
+            </div>
+            <p class="upload-modal-text">正在上传文件...</p>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -542,8 +675,32 @@ const currentOpenSessionId = ref(null) // 当前打开的会话ID
 const currentSessionMessages = ref([]) // 当前会话的消息列表
 const chatPanelWidth = ref(280) // 聊天面板宽度
 
+// 文件预览相关
+const currentFileType = ref('pdf') // 当前文件类型: pdf, word, excel, text
+const filePreviewContent = ref('') // 文件预览内容（Word/TXT）
+const excelData = ref(null) // Excel 数据
+const currentExcelSheet = ref(0) // 当前 Excel Sheet 索引
+const isUploadedFile = ref(false) // 是否是上传的文件（区分于论文预览）
+// 文件上传loading弹窗
+const showUploadModal = ref(false)
+const uploadProgress = ref(0)
+
 // 模板侧边栏固定宽度（需与 CSS `.template-sidebar` 的宽度保持一致）
 const TEMPLATE_SIDEBAR_WIDTH = 280
+
+// Excel 当前 Sheet 数据
+const currentSheetData = computed(() => {
+  if (!excelData.value || !excelData.value.data) return null
+  const sheetName = excelData.value.sheets[currentExcelSheet.value]
+  return excelData.value.data[sheetName]
+})
+
+// 上传进度环
+const uploadDashOffset = computed(() => {
+  const pct = Math.max(0, Math.min(100, uploadProgress.value))
+  const val = circumferenceVal - (pct / 100) * circumferenceVal
+  return `${val}px`
+})
 
 const getViewportClampedPos = (baseTop, baseLeft, selWidth) => {
   const margin = 8
@@ -800,13 +957,11 @@ const loadedVisualizations = ref([])
 // PDF 下载与预览
 const isDownloading = ref(false)
 const downloadProgress = ref(0)
-const pdfBlobUrl = ref('')
+const downloadError = ref('') // PDF下载错误信息
 // PDF.js 渲染相关 / 专用viewer
 const pdfContainer = ref(null)
 const pdfDocRef = ref(null)
-const pdfLibRef = ref(null)
-const isRendering = ref(false)
-const maxRenderPages = 8
+const pdfBlobUrl = ref('')
 const useIframeFallback = ref(false)
 const viewerSrc = ref('')
 const viewerFrame = ref(null)
@@ -906,10 +1061,98 @@ const triggerFileUpload = () => {
   fileInput.value.click()
 }
 
-const handleFileUpload = (event) => {
+const handleFileUpload = async (event) => {
   const file = event.target.files[0]
-  if (file && file.type === 'application/pdf') {
-    console.log('已选择文件:', file.name)
+  if (!file) return
+  
+  // 验证文件类型
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt']
+  const fileExtension = '.' + file.name.split('.').pop().toLowerCase()
+  
+  if (!allowedExtensions.includes(fileExtension)) {
+    alert('不支持的文件类型。支持的格式：PDF, Word, Excel, TXT')
+    return
+  }
+  
+  // 显示上传弹窗
+  showUploadModal.value = true
+  uploadProgress.value = 0
+  
+  try {
+    // 上传文件
+    const response = await apiService.uploadFile(file, (progressEvent) => {
+      if (progressEvent.total) {
+        uploadProgress.value = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+      }
+    })
+    
+    if (response.success) {
+      // 上传成功，关闭弹窗，加载预览
+      showUploadModal.value = false
+      await loadFilePreview(response)
+    } else {
+      showUploadModal.value = false
+      alert('上传失败：' + (response.error || '未知错误'))
+    }
+  } catch (error) {
+    console.error('Upload error:', error)
+    showUploadModal.value = false
+    alert('上传失败，请重试')
+  }
+  
+  // 清空 input
+  event.target.value = ''
+}
+
+// 加载文件预览
+const loadFilePreview = async (fileInfo) => {
+  try {
+    currentFileType.value = fileInfo.file_type
+    selectedPaperTitle.value = fileInfo.filename
+    showPdfPreview.value = true
+    showVisualization.value = false
+    isUploadedFile.value = false // 文件预览时也隐藏搜索框
+    
+    if (fileInfo.file_type === 'pdf') {
+      // PDF: 使用 iframe 预览
+      const previewUrl = `/api/files/preview/${fileInfo.file_id}/`
+      viewerSrc.value = `/pdf-viewer.html?file=${encodeURIComponent(previewUrl)}&name=${encodeURIComponent(fileInfo.filename)}`
+      useIframeFallback.value = true
+      isDownloading.value = false
+    } else {
+      // 其他文件类型：调用 API 获取预览内容
+      const response = await apiService.previewFile(fileInfo.file_id)
+      
+      if (response.success || response.file_type) {
+        if (fileInfo.file_type === 'text' || fileInfo.file_type === 'word') {
+          filePreviewContent.value = response.content
+        } else if (fileInfo.file_type === 'excel') {
+          excelData.value = response.data
+          currentExcelSheet.value = 0
+        }
+      } else {
+        alert('预览失败：' + (response.error || '未知错误'))
+      }
+      isDownloading.value = false
+    }
+  } catch (error) {
+    console.error('Preview error:', error)
+    alert('预览失败')
+    isDownloading.value = false
+  }
+}
+
+// 加载从首页上传的文件
+const loadUploadedFile = async () => {
+  const uploadedFileInfo = sessionStorage.getItem('uploadedFileInfo')
+  if (uploadedFileInfo) {
+    try {
+      const fileInfo = JSON.parse(uploadedFileInfo)
+      sessionStorage.removeItem('uploadedFileInfo')
+      await loadFilePreview(fileInfo)
+    } catch (error) {
+      console.error('Load uploaded file error:', error)
+    }
   }
 }
 
@@ -935,7 +1178,9 @@ const selectPaper = async (paper) => {
   pdfBlobUrl.value = ''
   isDownloading.value = true
   downloadProgress.value = 0
+  downloadError.value = '' // 清空错误
   useIframeFallback.value = false
+  isUploadedFile.value = false // 论文预览时隐藏搜索框
   try {
     const resp = await apiService.proxyPdf(paper.pdf_url, (e) => {
       if (e && e.total) {
@@ -960,6 +1205,7 @@ const selectPaper = async (paper) => {
     useIframeFallback.value = true
   } catch (err) {
     console.error('PDF下载失败:', err)
+    downloadError.value = 'PDF下载失败，请检查网络连接或稍后重试'
   } finally {
     isDownloading.value = false
   }
@@ -1010,6 +1256,11 @@ const closePdfPreview = () => {
     pdfContainer.value.innerHTML = ''
   }
   viewerSrc.value = ''
+  // 重置文件预览状态
+  isUploadedFile.value = false
+  filePreviewContent.value = ''
+  excelData.value = null
+  currentExcelSheet.value = 0
 }
 
 const applyVisualization = async () => {
@@ -1501,6 +1752,9 @@ onMounted(() => {
   // 监听主文档选择
   attachSelectionListenersTo(document)
   
+  // 检查是否有从首页上传的文件
+  loadUploadedFile()
+  
   const query = route.query.q || route.query.url
   if (query) {
     searchQuery.value = query
@@ -1645,5 +1899,296 @@ const initPdfViewer = async () => {
   max-width: 1100px;
   margin: 0 auto;
   padding: 16px 0 24px;
+}
+
+/* Excel 预览样式 */
+.excel-content-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.excel-tab:hover {
+  color: #2c3e50;
+}
+
+.excel-tab.active {
+  color: #3498db !important;
+  border-bottom-color: #3498db !important;
+  font-weight: 600;
+}
+
+.excel-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+/* Word 预览样式 */
+.word-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 60px;
+  background: white;
+  min-height: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.word-content {
+  color: #2c3e50;
+  font-size: 15px;
+  line-height: 1.8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.word-content :deep(p) {
+  margin: 0 0 16px 0;
+  text-align: justify;
+}
+
+.word-content :deep(h1),
+.word-content :deep(h2),
+.word-content :deep(h3) {
+  margin: 24px 0 16px 0;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.word-content :deep(h1) {
+  font-size: 28px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 8px;
+}
+
+.word-content :deep(h2) {
+  font-size: 22px;
+}
+
+.word-content :deep(h3) {
+  font-size: 18px;
+}
+
+.word-content :deep(ul),
+.word-content :deep(ol) {
+  margin: 12px 0;
+  padding-left: 30px;
+}
+
+.word-content :deep(li) {
+  margin: 6px 0;
+}
+
+.word-content :deep(table) {
+  width: 100%;
+  margin: 20px 0;
+  border-collapse: collapse;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.word-content :deep(th) {
+  background: #f8f9fa;
+  color: #2c3e50;
+  font-weight: 600;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  text-align: left;
+}
+
+.word-content :deep(td) {
+  padding: 10px 12px;
+  border: 1px solid #dee2e6;
+  color: #34495e;
+}
+
+.word-content :deep(tr:hover) {
+  background: #f8f9fa;
+}
+
+.word-content :deep(strong),
+.word-content :deep(b) {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.word-content :deep(em),
+.word-content :deep(i) {
+  font-style: italic;
+}
+
+.word-content :deep(blockquote) {
+  margin: 16px 0;
+  padding: 12px 20px;
+  background: #f8f9fa;
+  border-left: 4px solid #3498db;
+  color: #555;
+}
+
+/* TXT 预览样式 */
+.text-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 48px;
+  background: white;
+  min-height: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.text-content {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: #2c3e50;
+  background: #fafbfc;
+  padding: 24px;
+  border-radius: 6px;
+  border: 1px solid #e1e4e8;
+}
+
+/* 加载文本样式 */
+.loading-text {
+  color: #95a5a6;
+  text-align: center;
+  padding: 40px;
+  font-size: 14px;
+}
+
+/* PDF下载错误样式 */
+.download-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+}
+
+.download-error svg {
+  margin-bottom: 24px;
+}
+
+.download-error h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e74c3c;
+  margin: 0 0 12px 0;
+}
+
+.download-error p {
+  font-size: 14px;
+  color: #7f8c8d;
+  margin: 0;
+}
+
+/* 上传弹窗样式 */
+.upload-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.upload-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.upload-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.upload-modal-text {
+  font-size: 16px;
+  color: #2c3e50;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* 文件预览工具栏样式 */
+.file-toolbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 12px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #e3e6eb;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4b5563;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: #f8f9fa;
+  border-color: #d0d5dd;
+}
+
+.toolbar-btn svg {
+  flex-shrink: 0;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: #eee;
+  margin: 0 6px;
+}
+
+.file-title {
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

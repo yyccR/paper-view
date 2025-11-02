@@ -38,6 +38,9 @@ from core.chat_views import (
     translate_text, chat_with_text, translate_stream, 
     chat_stream, session_manage
 )
+from core.file_views import (
+    upload_file, preview_file, download_file, delete_file
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -67,6 +70,12 @@ urlpatterns = [
     # 会话管理
     path('api/sessions/', session_manage, name='session_list'),
     path('api/sessions/<int:session_id>/', session_manage, name='session_detail'),
+    
+    # 文件上传和预览
+    path('api/files/upload/', upload_file, name='upload_file'),
+    path('api/files/preview/<str:file_id>/', preview_file, name='preview_file'),
+    path('api/files/download/<str:file_id>/', download_file, name='download_file'),
+    path('api/files/<str:file_id>/', delete_file, name='delete_file'),
 ]
 
 # 开发环境下提供media和assets文件访问

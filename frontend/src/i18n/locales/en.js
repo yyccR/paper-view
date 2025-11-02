@@ -339,5 +339,14 @@ export default {
     inputPlaceholder: 'Type a message...',
     translating: 'Translating...',
     sending: 'Sending...'
+  },
+  
+  // File preview
+  filePreview: {
+    download: 'Download',
+    close: 'Close',
+    loading: 'Loading...',
+    rows: 'Rows',
+    columns: 'Columns'
   }
 }

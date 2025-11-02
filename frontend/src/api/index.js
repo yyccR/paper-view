@@ -72,7 +72,26 @@ export const apiService = {
   getSessions: () => api.get('/sessions/'),
   getSession: (sessionId) => api.get(`/sessions/${sessionId}/`),
   createSession: (data) => api.post('/sessions/', data),
-  deleteSession: (sessionId) => api.delete(`/sessions/${sessionId}/`)
+  deleteSession: (sessionId) => api.delete(`/sessions/${sessionId}/`),
+  
+  // 文件上传和预览
+  uploadFile: (file, onProgress) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/files/upload/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      onUploadProgress: onProgress
+    })
+  },
+  previewFile: (fileId) => api.get(`/files/preview/${fileId}/`),
+  downloadFile: (fileId) => {
+    return api.get(`/files/download/${fileId}/`, {
+      responseType: 'blob'
+    })
+  },
+  deleteFile: (fileId) => api.delete(`/files/${fileId}/`)
 }
 
 export default api

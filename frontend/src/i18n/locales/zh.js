@@ -339,5 +339,14 @@ export default {
     inputPlaceholder: '输入消息...',
     translating: '翻译中...',
     sending: '发送中...'
+  },
+  
+  // 文件预览
+  filePreview: {
+    download: '下载',
+    close: '关闭',
+    loading: '加载中...',
+    rows: '行',
+    columns: '列'
   }
 }
