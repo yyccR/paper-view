@@ -9,48 +9,19 @@
       @toggle-user="handleUserToggle"
     />
     
-    <!-- 可视化模板边栏 - 固定在导航栏右边 -->
-    <aside class="template-sidebar" :class="{ active: showTemplatePanel }">
-      <div class="template-header">
-        <h3>{{ $t('workspace.templates.title') }}</h3>
-      </div>
-      <div class="template-grid">
-        <div 
-          v-for="(image, index) in thumbnails" 
-          :key="index" 
-          class="template-item" 
-          :class="{ active: selectedTemplate === index }"
-          @click="selectTemplate(index)"
-          @mouseenter="handleTemplateHover(index, $event)"
-          @mouseleave="handleTemplateLeave"
-          ref="templateItems"
-        >
-          <img :src="`/assets/index_images/${image}`" :alt="`模板 ${index + 1}`" class="template-image">
-          <span class="template-label">{{ getLabel(image) }}</span>
-        </div>
-      </div>
-    </aside>
-    
-    <!-- 悬浮提示框 - 使用Teleport渲染到body -->
-    <Teleport to="body">
-      <div 
-        v-if="hoveredTemplate !== null && tooltipPosition" 
-        class="template-tooltip-portal"
-        :style="{ 
-          top: tooltipPosition.top + 'px', 
-          left: tooltipPosition.left + 'px',
-          transform: tooltipPosition.transform 
-        }"
-      >
-        <div class="tooltip-content">
-          <h4 class="tooltip-title">{{ getLabel(thumbnails[hoveredTemplate]) }}</h4>
-          <div class="tooltip-image-wrapper">
-            <img :src="`/assets/index_images/${thumbnails[hoveredTemplate]}`" :alt="getLabel(thumbnails[hoveredTemplate])" class="tooltip-image">
-          </div>
-          <p class="tooltip-description">{{ getDescription(thumbnails[hoveredTemplate]) }}</p>
-        </div>
-      </div>
-    </Teleport>
+    <!-- 可视化模板边栏 - 组件化 -->
+    <TemplateSidebar
+      :active="showTemplatePanel"
+      :thumbnails="thumbnails"
+      :selectedTemplate="selectedTemplate"
+      :hoveredTemplate="hoveredTemplate"
+      :tooltipPosition="tooltipPosition"
+      :getLabel="getLabel"
+      :getDescription="getDescription"
+      @select-template="selectTemplate"
+      @hover-template="handleTemplateHover"
+      @leave-template="handleTemplateLeave"
+    />
     
     <!-- 遮罩层 - AI面板不显示遮罩 -->
     <div 
@@ -59,66 +30,18 @@
       @click="closeAllPanels"
     ></div>
 
-    <!-- 通知面板 - 显示聊天会话历史 -->
-    <div class="notification-panel" :class="{ active: showNotificationPanel }">
-      <div class="notification-header">
-        <h3>{{ $t('workspace.notification.title') }}</h3>
-        <button class="close-btn" @click="handleNotificationClose">&times;</button>
-      </div>
-      <div class="notification-list">
-        <div 
-          v-for="session in chatSessions" 
-          :key="session.id"
-          class="session-item"
-          @click="openSession(session.id)"
-        >
-          <div class="session-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="session-content">
-            <p class="session-title">{{ session.title }}</p>
-            <div class="session-meta">
-              <span class="session-type" :class="`type-${session.session_type}`">
-                {{ $t(`workspace.notification.sessionType.${session.session_type}`) }}
-              </span>
-              <span class="session-count">{{ $t('workspace.notification.messageCount', { count: session.message_count }) }}</span>
-            </div>
-            <span class="session-time">{{ formatTime(session.last_message_at || session.created_at) }}</span>
-          </div>
-          <button 
-            class="delete-session-btn" 
-            @click.stop="deleteSession(session.id)"
-            :title="$t('workspace.notification.deleteSession')"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </div>
-        <div v-if="chatSessions.length === 0" class="empty-state">
-          <p>{{ $t('workspace.notification.noSessions') }}</p>
-        </div>
-      </div>
-    </div>
+    <!-- 通知面板 - 组件化 -->
+    <NotificationPanel
+      :active="showNotificationPanel"
+      :chatSessions="chatSessions"
+      :formatTime="formatTime"
+      @close="handleNotificationClose"
+      @open-session="openSession"
+      @delete-session="deleteSession"
+    />
 
-    <!-- 用户面板 -->
-    <div class="user-panel" :class="{ active: showUserPanel }">
-      <div class="user-info">
-        <img src="/default-avatar.svg" alt="用户头像" class="user-avatar">
-        <div class="user-details">
-          <h4>{{ $t('workspace.user.guestUser') }}</h4>
-          <p>{{ $t('workspace.user.notLoggedIn') }}</p>
-        </div>
-      </div>
-      <div class="user-menu">
-        <a href="#profile" class="menu-item">{{ $t('workspace.user.profile') }}</a>
-        <a href="#settings" class="menu-item">{{ $t('workspace.user.settings') }}</a>
-        <div class="menu-divider"></div>
-        <a href="#login" class="menu-item">{{ $t('workspace.user.login') }}</a>
-      </div>
-    </div>
+    <!-- 用户面板 - 组件化 -->
+    <UserPanel :active="showUserPanel" />
 
     <!-- 翻译聊天面板 -->
     <TranslateChat 
@@ -133,162 +56,22 @@
       @widthChanged="handleChatPanelWidthChange"
     />
 
-    <!-- AI模型配置面板 -->
-    <div class="ai-config-panel" :class="{ active: showAIPanel }">
-      <div class="ai-config-header">
-        <h3>{{ $t('aiConfig.title') }}</h3>
-        <button class="close-btn" @click="showAIPanel = false">&times;</button>
-      </div>
-      <div class="ai-config-content">
-        <!-- 当前选中的模型 -->
-        <div v-if="currentAIConfig" class="current-model-info">
-          <div class="info-row">
-            <div class="info-label">{{ $t('aiConfig.currentModel') }}</div>
-            <div class="current-badge">Active</div>
-          </div>
-          <div class="info-value">
-            <span class="provider-tag">{{ getProviderDisplayName(currentAIConfig.provider) }}</span>
-            <span class="model-tag">{{ currentAIConfig.model_name }}</span>
-          </div>
-        </div>
-        
-        <!-- 模型提供商列表 -->
-        <div class="ai-providers-grid">
-          <div 
-            v-for="(provider, key) in aiProviders" 
-            :key="key"
-            class="provider-card"
-            :class="{ 
-              expanded: expandedProviders.has(key),
-              'has-selected': hasSelectedModel(key)
-            }"
-          >
-            <div class="provider-header" @click="toggleProvider(key)">
-              <div class="provider-info">
-                <div class="provider-logo">
-                  <img :src="`/assets/logos/${provider.logo}.png`" :alt="provider.name" @error="handleLogoError">
-                </div>
-                <div class="provider-details">
-                  <span class="provider-name">{{ provider.name }}</span>
-                  <span class="model-count">{{ provider.models.length }} {{ $t('aiConfig.models') }}</span>
-                </div>
-              </div>
-              <div class="provider-actions">
-                <span v-if="hasSelectedModel(key)" class="active-indicator">●</span>
-                <svg class="expand-icon" :class="{ rotated: expandedProviders.has(key) }" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-            </div>
-            
-            <!-- 模型列表：添加向下展开过渡动画 -->
-            <transition name="expand-down">
-            <div v-show="expandedProviders.has(key)" class="models-list">
-              <div 
-                v-for="model in provider.models" 
-                :key="model.id"
-                class="model-item"
-                @click="selectModel(key, model)"
-                :class="{ selected: isModelSelected(key, model.id) }"
-              >
-                <div class="model-info">
-                  <div class="model-name">
-                    {{ model.name }}
-                  </div>
-                  <div class="model-description">{{ model.description }}</div>
-                </div>
-                <div v-if="isModelSelected(key, model.id)" class="selected-badge">✓</div>
-              </div>
-            </div>
-            </transition>
-          </div>
-          
-          <!-- 自定义新增模型卡片 -->
-          <div class="provider-card custom-model-card" :class="{ expanded: showCustomModelForm }">
-            <div class="provider-header" @click="toggleCustomModelForm">
-              <div class="provider-info">
-                <div class="provider-logo custom-logo">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                </div>
-                <div class="provider-details">
-                  <span class="provider-name">{{ $t('aiConfig.customModel.title') }}</span>
-                  <span class="model-count">{{ $t('aiConfig.customModel.subtitle') }}</span>
-                </div>
-              </div>
-              <div class="provider-actions">
-                <svg class="expand-icon" :class="{ rotated: showCustomModelForm }" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </div>
-            </div>
-            
-            <!-- 自定义模型表单 -->
-            <div v-if="showCustomModelForm" class="custom-model-form">
-              <div class="form-group">
-                <label>{{ $t('aiConfig.customModel.providerName') }}</label>
-                <input 
-                  v-model="customModel.provider" 
-                  type="text" 
-                  :placeholder="$t('aiConfig.customModel.providerPlaceholder')"
-                  class="form-input"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label>{{ $t('aiConfig.customModel.modelName') }}</label>
-                <input 
-                  v-model="customModel.modelName" 
-                  type="text" 
-                  :placeholder="$t('aiConfig.customModel.modelPlaceholder')"
-                  class="form-input"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label>{{ $t('aiConfig.customModel.apiBase') }}</label>
-                <input 
-                  v-model="customModel.apiBase" 
-                  type="text" 
-                  :placeholder="$t('aiConfig.customModel.apiBasePlaceholder')"
-                  class="form-input"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label>{{ $t('aiConfig.customModel.apiKey') }}</label>
-                <input 
-                  v-model="customModel.apiKey" 
-                  type="password" 
-                  :placeholder="$t('aiConfig.customModel.apiKeyPlaceholder')"
-                  class="form-input"
-                />
-              </div>
-              
-              <div class="form-group">
-                <label>{{ $t('aiConfig.customModel.description') }}</label>
-                <textarea 
-                  v-model="customModel.description" 
-                  :placeholder="$t('aiConfig.customModel.descriptionPlaceholder')"
-                  class="form-textarea"
-                  rows="2"
-                ></textarea>
-              </div>
-              
-              <div class="form-actions">
-                <button @click="saveCustomModel" class="btn-primary" :disabled="!isCustomModelValid">
-                  {{ $t('aiConfig.customModel.save') }}
-                </button>
-                <button @click="resetCustomModelForm" class="btn-secondary">
-                  {{ $t('aiConfig.customModel.reset') }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- AI模型配置面板 - 组件化 -->
+    <AIConfigPanel
+      :active="showAIPanel"
+      :aiProviders="aiProviders"
+      :expandedProviders="expandedProviders"
+      :currentAIConfig="currentAIConfig"
+      :showCustomModelForm="showCustomModelForm"
+      :customModel="customModel"
+      :isCustomModelValid="isCustomModelValid"
+      @close="showAIPanel = false"
+      @toggle-provider="toggleProvider"
+      @select-model="(p) => selectModel(p.provider, p.model)"
+      @toggle-custom-form="toggleCustomModelForm"
+      @save-custom-model="saveCustomModel"
+      @reset-custom-model="resetCustomModelForm"
+    />
 
     <!-- 主工作区 -->
     <main class="workspace" :style="workspaceStyle">
@@ -320,211 +103,52 @@
         </div>
       </div>
 
-      <!-- 文件预览区域 -->
-      <div class="pdf-preview-section" v-if="showPdfPreview" :class="{ 'pdf-collapsed': showVisualization && !pdfExpanded }">
-        <!-- 文件内容区域 -->
-        <div class="preview-content" :class="{ 'pdf-expanded': pdfExpanded }" ref="previewContent">
-          <!-- 圆形进度加载 -->
-          <div v-if="isDownloading" class="pdf-loading">
-            <div class="circle-wrapper">
-              <svg class="progress-ring" width="120" height="120">
-                <circle class="progress-ring__background" stroke="#ecf0f1" stroke-width="10" fill="transparent" r="52" cx="60" cy="60" />
-                <circle class="progress-ring__progress" :stroke="progressColor" stroke-width="10" fill="transparent" r="52" cx="60" cy="60"
-                        :style="{ strokeDasharray: circumference, strokeDashoffset: dashOffset }" stroke-linecap="round" />
-              </svg>
-              <div class="progress-text">{{ downloadProgress }}%</div>
-            </div>
-          </div>
-
-          <!-- PDF 预览 -->
-          <div v-if="!showVisualization && currentFileType === 'pdf'" class="pdf-viewer" style="width:100%; height:100%; overflow: auto;">
-            <!-- 下载错误提示 -->
-            <div v-if="downloadError" class="download-error">
-              <svg width="80" height="80" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" stroke="#e74c3c" stroke-width="2"/>
-                <path d="M12 8V12M12 16H12.01" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-              <h3>{{ downloadError }}</h3>
-              <p>请检查网络连接或稍后重试</p>
-            </div>
-            <!-- PDF 正常预览 -->
-            <template v-else>
-              <template v-if="!useIframeFallback">
-                <div ref="pdfContainer" class="pdf-canvas-container"></div>
-                <p v-if="!isDownloading && !pdfBlobUrl" style="color:#95a5a6;">准备预览PDF...</p>
-              </template>
-              <template v-else>
-                <iframe v-if="viewerSrc" ref="viewerFrame" :src="viewerSrc" @load="onViewerLoaded" style="border:none; width:100%; height:100%;"></iframe>
-                <p v-else style="color:#95a5a6;">准备预览PDF...</p>
-              </template>
-            </template>
-          </div>
-          
-          <!-- Word 预览 -->
-          <div v-if="!showVisualization && currentFileType === 'word'" class="word-preview" style="width:100%; height:100%; display: flex; flex-direction: column;">
-            <!-- 顶部工具栏 -->
-            <div class="file-toolbar">
-              <div class="toolbar-left">
-                <button class="toolbar-btn" @click="closePdfPreview" title="返回列表">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  返回
-                </button>
-                <div class="toolbar-sep"></div>
-                <span class="file-title">{{ selectedPaperTitle }}</span>
-              </div>
-            </div>
-            <!-- 内容区域 -->
-            <div class="word-viewer" style="flex: 1; overflow: auto; background: #f8f9fa;">
-              <div class="word-container">
-                <div v-if="filePreviewContent" v-html="filePreviewContent" class="word-content"></div>
-                <p v-else class="loading-text">加载中...</p>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Excel 预览 -->
-          <div v-if="!showVisualization && currentFileType === 'excel'" class="excel-preview" style="width:100%; height:100%; display: flex; flex-direction: column;">
-            <!-- 顶部工具栏 -->
-            <div class="file-toolbar">
-              <div class="toolbar-left">
-                <button class="toolbar-btn" @click="closePdfPreview" title="返回列表">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  返回
-                </button>
-                <div class="toolbar-sep"></div>
-                <span class="file-title">{{ selectedPaperTitle }}</span>
-              </div>
-            </div>
-            <!-- Excel Sheet 标签页 -->
-            <div class="excel-tabs" v-if="excelData && excelData.sheets" style="display: flex; gap: 4px; padding: 12px 16px 0; background: white; border-bottom: 1px solid #e0e0e0;">
-              <button 
-                v-for="(sheet, index) in excelData.sheets" 
-                :key="sheet"
-                :class="['excel-tab', { active: currentExcelSheet === index }]"
-                @click="currentExcelSheet = index"
-                style="padding: 8px 16px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 13px; color: #7f8c8d; transition: all 0.2s;"
-              >
-                {{ sheet }}
-              </button>
-            </div>
-            <div class="excel-content" v-if="currentSheetData" style="flex: 1; overflow: auto; padding: 24px;">
-              <div class="excel-content-wrapper">
-                <div class="table-wrapper" style="overflow-x: auto;">
-                  <table class="excel-table" style="width: 100%; border-collapse: collapse; font-size: 13px; background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-                  <thead style="background: #f8f9fa; position: sticky; top: 0; z-index: 10;">
-                    <tr>
-                      <th v-for="(col, idx) in currentSheetData.columns" :key="idx" style="padding: 12px; text-align: left; font-weight: 600; color: #2c3e50; border: 1px solid #e0e0e0; white-space: nowrap;">
-                        {{ col }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, rowIdx) in currentSheetData.data" :key="rowIdx" style="transition: background 0.2s;">
-                      <td v-for="(cell, cellIdx) in row" :key="cellIdx" style="padding: 10px 12px; border: 1px solid #e0e0e0; color: #34495e;">
-                        {{ cell !== null ? cell : '' }}
-                      </td>
-                    </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="excel-info" style="margin-top: 12px; padding: 8px 12px; background: white; border-radius: 6px; font-size: 12px; color: #7f8c8d; text-align: center; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);">
-                  {{ currentSheetData.rows }} 行 × {{ currentSheetData.cols }} 列
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- TXT 预览 -->
-          <div v-if="!showVisualization && currentFileType === 'text'" class="text-preview" style="width:100%; height:100%; display: flex; flex-direction: column;">
-            <!-- 顶部工具栏 -->
-            <div class="file-toolbar">
-              <div class="toolbar-left">
-                <button class="toolbar-btn" @click="closePdfPreview" title="返回列表">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  返回
-                </button>
-                <div class="toolbar-sep"></div>
-                <span class="file-title">{{ selectedPaperTitle }}</span>
-              </div>
-            </div>
-            <!-- 内容区域 -->
-            <div class="text-viewer" style="flex: 1; overflow: auto; background: #f8f9fa;">
-              <div class="text-container">
-                <pre v-if="filePreviewContent" class="text-content">{{ filePreviewContent }}</pre>
-                <p v-else class="loading-text">加载中...</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 文件预览区域 - 组件化 -->
+      <PdfPreviewSection
+        :visible="showPdfPreview"
+        :showVisualization="showVisualization"
+        :pdfExpanded="pdfExpanded"
+        :isDownloading="isDownloading"
+        :downloadProgress="downloadProgress"
+        :downloadError="downloadError"
+        :currentFileType="currentFileType"
+        :useIframeFallback="useIframeFallback"
+        :viewerSrc="viewerSrc"
+        :pdfBlobUrl="pdfBlobUrl"
+        :selectedPaperTitle="selectedPaperTitle"
+        :filePreviewContent="filePreviewContent"
+        :excelData="excelData"
+        :currentExcelSheet="currentExcelSheet"
+        @close-preview="closePdfPreview"
+        @viewer-loaded="onChildViewerLoaded"
+        @register-pdf-container="(el) => (pdfContainer.value = el)"
+        @register-preview-content="(el) => (previewContent.value = el)"
+        @set-excel-sheet="(idx) => (currentExcelSheet.value = idx)"
+      />
 
       <!-- 文本选择操作浮层 -->
-      <Teleport to="body">
-        <div 
-          v-if="showSelectionActions && selectionText"
-          class="selection-actions"
-          :style="{ top: selectionPos.top + 'px', left: selectionPos.left + 'px' }"
-          @mousedown.stop="onToolbarMouseDown"
-        >
-          <button class="sel-btn" @click="handleTranslate" :title="$t('selection.translate')">
-            {{ $t('selection.translate') }}
-          </button>
-          <div class="lang-selector" @click.stop>
-            <button class="lang-btn" @click="toggleLangMenu" :title="$t('selection.language')">
-              {{ $t(`selection.lang.${selectedLang}`) }}
-              <svg class="chevron" width="12" height="12" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <ul v-if="showLangMenu" class="lang-menu">
-              <li 
-                v-for="code in langCodes" 
-                :key="code" 
-                :class="{ active: code === selectedLang }"
-                @click="selectLang(code)"
-              >{{ $t(`selection.lang.${code}`) }}</li>
-            </ul>
-          </div>
-          <button class="sel-btn" @click="handleAsk" :title="$t('selection.ask')">
-            {{ $t('selection.ask') }}
-          </button>
-          <button class="sel-btn" @click="handleCopy" :title="$t('selection.copy')">
-            {{ $t('selection.copy') }}
-          </button>
-        </div>
-      </Teleport>
+      <SelectionActions
+        :visible="showSelectionActions"
+        :position="selectionPos"
+        :selectionText="selectionText"
+        :selectedLang="selectedLang"
+        :langCodes="langCodes"
+        :showLangMenu="showLangMenu"
+        @mousedown="onToolbarMouseDown"
+        @translate="handleTranslate"
+        @ask="handleAsk"
+        @copy="handleCopy"
+        @toggle-lang-menu="toggleLangMenu"
+        @select-lang="selectLang"
+      />
 
-      <!-- 可视化结果区域 -->
-      <div class="visualization-section" v-if="showVisualization">
-        <!-- 右上角按钮组 -->
-        <div class="viz-controls">
-          <button class="viz-btn back-to-pdf-btn" @click="backToPdfPreview" :title="$t('workspace.pdf.backToPaper')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span class="btn-text">{{ $t('workspace.pdf.backToPaper') }}</span>
-          </button>
-        </div>
-        
-        <!-- 可视化图表，直接填充整个区域 -->
-        <div class="visualization-content">
-          <ConnectedPapersGraph 
-            v-if="visualizationData && visualizationData.nodes"
-            :papers="visualizationData.nodes"
-            :edges="visualizationData.edges"
-            :mainPaper="visualizationData.mainPaper"
-          />
-          <WordCloudHeatmap 
-            v-if="wordCloudData && wordCloudData.length > 0"
-            :wordData="wordCloudData"
-          />
-        </div>
-      </div>
+      <!-- 可视化结果区域 - 组件化 -->
+      <VisualizationSection
+        :visible="showVisualization"
+        :visualizationData="visualizationData"
+        :wordCloudData="wordCloudData"
+        @back-to-pdf="backToPdfPreview"
+      />
 
       <!-- 内容展示区域 -->
       <div class="content-section" v-show="!showPdfPreview">
@@ -539,69 +163,27 @@
           <p>{{ $t('workspace.welcome.subtitle') }}</p>
         </div>
 
-        <!-- 搜索结果列表 -->
-        <div class="search-results" v-if="currentView === 'search'">
-          <h3 class="results-title">{{ $t('workspace.searchResults.title') }}</h3>
-          <div class="results-list">
-            <div 
-              v-for="result in paginatedResults" 
-              :key="result.title" 
-              class="result-item"
-              @click="selectPaper(result)"
-            >
-              <h3 class="result-title">{{ result.title }}</h3>
-              <p class="result-authors">{{ result.authors }}</p>
-              <p class="result-abstract">{{ result.abstract }}</p>
-              <div class="result-meta">
-                <span>{{ $t('workspace.searchResults.year', { year: result.year }) }}</span>
-                <span>{{ $t('workspace.searchResults.citations', { count: result.citations }) }}</span>
-              </div>
-            </div>
-          </div>
-          <!-- 分页 -->
-          <div class="pagination" v-if="totalPages > 1">
-            <span class="pagination-info">{{ $t('workspace.pagination.showing') }} {{ startItem }}-{{ endItem }} {{ $t('workspace.pagination.of') }} {{ $t('workspace.pagination.total', { total: allResults.length }) }}</span>
-            <button class="pagination-btn" @click="goToPage(1)" :disabled="currentPage === 1">{{ $t('workspace.pagination.first') }}</button>
-            <button class="pagination-btn" @click="goToPage(currentPage - 1)" :disabled="currentPage === 1">{{ $t('workspace.pagination.previous') }}</button>
-            <div class="pagination-pages">
-              <button 
-                v-for="page in pageButtons" 
-                :key="page"
-                class="pagination-btn" 
-                :class="{ active: page === currentPage }"
-                @click="goToPage(page)"
-              >
-                {{ page }}
-              </button>
-            </div>
-            <button class="pagination-btn" @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages">{{ $t('workspace.pagination.next') }}</button>
-            <button class="pagination-btn" @click="goToPage(totalPages)" :disabled="currentPage === totalPages">{{ $t('workspace.pagination.last') }}</button>
-          </div>
-        </div>
+        <!-- 搜索结果列表 - 组件化 -->
+        <SearchResults
+          v-if="currentView === 'search'"
+          :results="paginatedResults"
+          :total="allResults.length"
+          :currentPage="currentPage"
+          :totalPages="totalPages"
+          :pageButtons="pageButtons"
+          :startItem="startItem"
+          :endItem="endItem"
+          @select-paper="selectPaper"
+          @goto-page="goToPage"
+        />
       </div>
     </main>
 
     <!-- 隐藏的文件上传输入 -->
-    <input type="file" ref="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" style="display: none;" @change="handleFileUpload">
+    <input type="file" ref="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="display: none;" @change="handleFileUpload">
     
-    <!-- 文件上传Loading弹窗 -->
-    <Teleport to="body">
-      <div v-if="showUploadModal" class="upload-modal-overlay" @click.self="">
-        <div class="upload-modal">
-          <div class="upload-modal-content">
-            <div class="circle-wrapper">
-              <svg class="progress-ring" width="120" height="120">
-                <circle class="progress-ring__background" stroke="#ecf0f1" stroke-width="10" fill="transparent" r="52" cx="60" cy="60" />
-                <circle class="progress-ring__progress" :stroke="progressColor" stroke-width="10" fill="transparent" r="52" cx="60" cy="60"
-                        :style="{ strokeDasharray: circumference, strokeDashoffset: uploadDashOffset }" stroke-linecap="round" />
-              </svg>
-              <div class="progress-text">{{ uploadProgress }}%</div>
-            </div>
-            <p class="upload-modal-text">正在上传文件...</p>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- 文件上传Loading弹窗 - 组件化 -->
+    <UploadProgressModal :visible="showUploadModal" :progress="uploadProgress" />
   </div>
 </template>
 
@@ -610,12 +192,19 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiService } from '@/api'
-import { isURL } from '@/utils/helpers'
+// removed unused: isURL
 import Sidebar from '@/components/Sidebar.vue'
-import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
-import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
 import TranslateChat from '@/components/TranslateChatNew.vue'
 import { parseBibTeX, convertToConnectedPapersFormat } from '@/utils/bibParser'
+import NotificationPanel from '@/components/workspace/NotificationPanel.vue'
+import UserPanel from '@/components/workspace/UserPanel.vue'
+import AIConfigPanel from '@/components/workspace/AIConfigPanel.vue'
+import SelectionActions from '@/components/workspace/SelectionActions.vue'
+import VisualizationSection from '@/components/workspace/VisualizationSection.vue'
+import SearchResults from '@/components/workspace/SearchResults.vue'
+import UploadProgressModal from '@/components/workspace/UploadProgressModal.vue'
+import TemplateSidebar from '@/components/workspace/TemplateSidebar.vue'
+import PdfPreviewSection from '@/components/workspace/PdfPreviewSection.vue'
 
 const { t } = useI18n()
 
@@ -635,6 +224,14 @@ const getLabel = (imageName) => {
   return t(`workspace.templates.${key}`, imageName.replace('.png', ''))
 }
 
+// 子组件 iframe 加载完成回调：桥接到原有逻辑
+const onChildViewerLoaded = (frameEl) => {
+  try {
+    viewerFrame.value = frameEl
+  } catch (e) {}
+  onViewerLoaded()
+}
+
 // 根据图片文件名获取描述（使用 i18n）
 const getDescription = (imageName) => {
   const key = imageName.replace('.png', '')
@@ -644,7 +241,7 @@ const getDescription = (imageName) => {
 // 悬浮状态
 const hoveredTemplate = ref(null)
 const tooltipPosition = ref(null)
-const templateItems = ref([])
+// removed: was used for old sidebar DOM refs
 
 // AI模型配置相关
 const aiProviders = ref({})
@@ -688,19 +285,9 @@ const uploadProgress = ref(0)
 // 模板侧边栏固定宽度（需与 CSS `.template-sidebar` 的宽度保持一致）
 const TEMPLATE_SIDEBAR_WIDTH = 280
 
-// Excel 当前 Sheet 数据
-const currentSheetData = computed(() => {
-  if (!excelData.value || !excelData.value.data) return null
-  const sheetName = excelData.value.sheets[currentExcelSheet.value]
-  return excelData.value.data[sheetName]
-})
+// moved to PdfPreviewSection
 
-// 上传进度环
-const uploadDashOffset = computed(() => {
-  const pct = Math.max(0, Math.min(100, uploadProgress.value))
-  const val = circumferenceVal - (pct / 100) * circumferenceVal
-  return `${val}px`
-})
+// moved to UploadProgressModal
 
 const getViewportClampedPos = (baseTop, baseLeft, selWidth) => {
   const margin = 8
@@ -960,21 +547,11 @@ const downloadProgress = ref(0)
 const downloadError = ref('') // PDF下载错误信息
 // PDF.js 渲染相关 / 专用viewer
 const pdfContainer = ref(null)
-const pdfDocRef = ref(null)
+// inline pdf.js rendering related states moved to child; keep only what is still used
 const pdfBlobUrl = ref('')
 const useIframeFallback = ref(false)
 const viewerSrc = ref('')
 const viewerFrame = ref(null)
-// 圆形进度参数
-const radius = 52
-const circumferenceVal = 2 * Math.PI * radius
-const circumference = `${circumferenceVal}px`
-const progressColor = '#3498db'
-const dashOffset = computed(() => {
-  const pct = Math.max(0, Math.min(100, downloadProgress.value))
-  const val = circumferenceVal - (pct / 100) * circumferenceVal
-  return `${val}px`
-})
 
 const allResults = ref([])
 const currentPage = ref(1)
@@ -1066,11 +643,11 @@ const handleFileUpload = async (event) => {
   if (!file) return
   
   // 验证文件类型
-  const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt']
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt']
   const fileExtension = '.' + file.name.split('.').pop().toLowerCase()
   
   if (!allowedExtensions.includes(fileExtension)) {
-    alert('不支持的文件类型。支持的格式：PDF, Word, Excel, TXT')
+    alert('不支持的文件类型。支持的格式：PDF, Word, Excel, CSV, TXT')
     return
   }
   
@@ -1181,6 +758,11 @@ const selectPaper = async (paper) => {
   downloadError.value = '' // 清空错误
   useIframeFallback.value = false
   isUploadedFile.value = false // 论文预览时隐藏搜索框
+  currentFileType.value = 'pdf' // 确保文件类型设置为PDF
+  // 清空非PDF文件的预览内容
+  filePreviewContent.value = ''
+  excelData.value = null
+  currentExcelSheet.value = 0
   try {
     const resp = await apiService.proxyPdf(paper.pdf_url, (e) => {
       if (e && e.total) {
@@ -1258,6 +840,7 @@ const closePdfPreview = () => {
   viewerSrc.value = ''
   // 重置文件预览状态
   isUploadedFile.value = false
+  currentFileType.value = 'pdf' // 重置文件类型为默认值
   filePreviewContent.value = ''
   excelData.value = null
   currentExcelSheet.value = 0
@@ -1786,409 +1369,5 @@ onUnmounted(() => {
   }
 })
 
-// 初始化并渲染 PDF 到画布
-const initPdfViewer = async () => {
-  try {
-    if (!pdfBlobUrl.value) return
-    isRendering.value = true
-    // 动态加载 pdf.js（使用CDN ESM）
-    if (!pdfLibRef.value) {
-      let pdfjsLib = null
-      try {
-        pdfjsLib = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs')
-      } catch (e1) {
-        try {
-          pdfjsLib = await import('https://unpkg.com/pdfjs-dist@4.10.38/build/pdf.min.mjs')
-        } catch (e2) {
-          console.error('加载pdf.js失败，切换iframe回退', e1, e2)
-          useIframeFallback.value = true
-          return
-        }
-      }
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs'
-      pdfLibRef.value = pdfjsLib
-    }
-    const pdfjsLib = pdfLibRef.value
-    // 确保容器存在，否则回退到 iframe
-    if (!pdfContainer.value) {
-      useIframeFallback.value = true
-      return
-    }
-    // 将 blob URL 转为 ArrayBuffer
-    const buf = await fetch(pdfBlobUrl.value).then(r => r.arrayBuffer())
-    const loadingTask = pdfjsLib.getDocument({ data: buf })
-    const pdf = await loadingTask.promise
-    pdfDocRef.value = pdf
-    // 清空容器并渲染前 maxRenderPages 页
-    pdfContainer.value.innerHTML = ''
-    const pagesToRender = Math.min(pdf.numPages, maxRenderPages)
-    for (let pageNum = 1; pageNum <= pagesToRender; pageNum++) {
-      const page = await pdf.getPage(pageNum)
-      const viewport = page.getViewport({ scale: 1.25 })
-      const canvas = document.createElement('canvas')
-      const context = canvas.getContext('2d')
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-      canvas.style.display = 'block'
-      canvas.style.margin = '12px auto'
-      canvas.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
-      pdfContainer.value.appendChild(canvas)
-      await page.render({ canvasContext: context, viewport }).promise
-    }
-    // 如果页数较多，给出提示
-    if (pdf.numPages > maxRenderPages) {
-      const tip = document.createElement('div')
-      tip.textContent = `已显示前 ${maxRenderPages} 页，共 ${pdf.numPages} 页`
-      tip.style.textAlign = 'center'
-      tip.style.color = '#7f8c8d'
-      tip.style.margin = '8px 0 16px'
-      pdfContainer.value.appendChild(tip)
-    }
-  } catch (e) {
-    console.error('PDF渲染失败，切换iframe回退:', e)
-    useIframeFallback.value = true
-  } finally {
-    isRendering.value = false
-  }
-}
+// removed: inline pdf.js renderer (now handled in PdfPreviewSection)
 </script>
-
-<style scoped>
-/* 预览容器内的加载样式 */
-.pdf-loading {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.circle-wrapper {
-  position: relative;
-  width: 140px;
-  height: 140px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.progress-ring {
-  transform: rotate(-90deg);
-}
-.progress-ring__background,
-.progress-ring__progress {
-  transition: stroke-dashoffset 0.2s ease;
-}
-.progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -60%);
-  font-size: 20px;
-  font-weight: 600;
-  color: #2c3e50;
-}
-.progress-subtext {
-  position: absolute;
-  top: calc(50% + 28px);
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 12px;
-  color: #7f8c8d;
-}
-.pdf-canvas-container {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 16px 0 24px;
-}
-
-/* Excel 预览样式 */
-.excel-content-wrapper {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.excel-tab:hover {
-  color: #2c3e50;
-}
-
-.excel-tab.active {
-  color: #3498db !important;
-  border-bottom-color: #3498db !important;
-  font-weight: 600;
-}
-
-.excel-table tbody tr:hover {
-  background: #f8f9fa;
-}
-
-/* Word 预览样式 */
-.word-container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 40px 60px;
-  background: white;
-  min-height: 100%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.word-content {
-  color: #2c3e50;
-  font-size: 15px;
-  line-height: 1.8;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-.word-content :deep(p) {
-  margin: 0 0 16px 0;
-  text-align: justify;
-}
-
-.word-content :deep(h1),
-.word-content :deep(h2),
-.word-content :deep(h3) {
-  margin: 24px 0 16px 0;
-  color: #1a1a1a;
-  font-weight: 600;
-}
-
-.word-content :deep(h1) {
-  font-size: 28px;
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 8px;
-}
-
-.word-content :deep(h2) {
-  font-size: 22px;
-}
-
-.word-content :deep(h3) {
-  font-size: 18px;
-}
-
-.word-content :deep(ul),
-.word-content :deep(ol) {
-  margin: 12px 0;
-  padding-left: 30px;
-}
-
-.word-content :deep(li) {
-  margin: 6px 0;
-}
-
-.word-content :deep(table) {
-  width: 100%;
-  margin: 20px 0;
-  border-collapse: collapse;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.word-content :deep(th) {
-  background: #f8f9fa;
-  color: #2c3e50;
-  font-weight: 600;
-  padding: 12px;
-  border: 1px solid #dee2e6;
-  text-align: left;
-}
-
-.word-content :deep(td) {
-  padding: 10px 12px;
-  border: 1px solid #dee2e6;
-  color: #34495e;
-}
-
-.word-content :deep(tr:hover) {
-  background: #f8f9fa;
-}
-
-.word-content :deep(strong),
-.word-content :deep(b) {
-  font-weight: 600;
-  color: #1a1a1a;
-}
-
-.word-content :deep(em),
-.word-content :deep(i) {
-  font-style: italic;
-}
-
-.word-content :deep(blockquote) {
-  margin: 16px 0;
-  padding: 12px 20px;
-  background: #f8f9fa;
-  border-left: 4px solid #3498db;
-  color: #555;
-}
-
-/* TXT 预览样式 */
-.text-container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 32px 48px;
-  background: white;
-  min-height: 100%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.text-content {
-  margin: 0;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  color: #2c3e50;
-  background: #fafbfc;
-  padding: 24px;
-  border-radius: 6px;
-  border: 1px solid #e1e4e8;
-}
-
-/* 加载文本样式 */
-.loading-text {
-  color: #95a5a6;
-  text-align: center;
-  padding: 40px;
-  font-size: 14px;
-}
-
-/* PDF下载错误样式 */
-.download-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 40px;
-  text-align: center;
-}
-
-.download-error svg {
-  margin-bottom: 24px;
-}
-
-.download-error h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #e74c3c;
-  margin: 0 0 12px 0;
-}
-
-.download-error p {
-  font-size: 14px;
-  color: #7f8c8d;
-  margin: 0;
-}
-
-/* 上传弹窗样式 */
-.upload-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  backdrop-filter: blur(4px);
-}
-
-.upload-modal {
-  background: white;
-  border-radius: 12px;
-  padding: 40px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-  animation: modalFadeIn 0.3s ease;
-}
-
-@keyframes modalFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.upload-modal-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-}
-
-.upload-modal-text {
-  font-size: 16px;
-  color: #2c3e50;
-  margin: 0;
-  font-weight: 500;
-}
-
-/* 文件预览工具栏样式 */
-.file-toolbar {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid #eee;
-  background: #fff;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  gap: 12px;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.toolbar-btn {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid #e3e6eb;
-  background: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #4b5563;
-  transition: all 0.2s;
-}
-
-.toolbar-btn:hover {
-  background: #f8f9fa;
-  border-color: #d0d5dd;
-}
-
-.toolbar-btn svg {
-  flex-shrink: 0;
-}
-
-.toolbar-sep {
-  width: 1px;
-  height: 22px;
-  background: #eee;
-  margin: 0 6px;
-}
-
-.file-title {
-  color: #4b5563;
-  font-size: 14px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-</style>

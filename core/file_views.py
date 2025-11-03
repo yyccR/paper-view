@@ -22,7 +22,7 @@ from loguru import logger
 SUPPORTED_EXTENSIONS = {
     'pdf': ['.pdf'],
     'word': ['.doc', '.docx'],
-    'excel': ['.xls', '.xlsx'],
+    'excel': ['.xls', '.xlsx', '.csv'],
     'text': ['.txt']
 }
 
@@ -263,33 +263,85 @@ def convert_word_to_html(file_path: Path) -> str:
 
 def convert_excel_to_json(file_path: Path) -> Dict[str, Any]:
     """
-    将 Excel 文件转换为 JSON 数据
+    将 Excel/CSV 文件转换为 JSON 数据
     """
     try:
         import pandas as pd
+        import numpy as np
         
-        # 读取 Excel 文件的所有 sheet
-        excel_file = pd.ExcelFile(file_path)
-        sheets_data = {}
+        def clean_value(val):
+            """将值转换为JSON可序列化的Python原生类型"""
+            if pd.isna(val):
+                return None
+            elif isinstance(val, (np.integer, np.int64, np.int32)):
+                return int(val)
+            elif isinstance(val, (np.floating, np.float64, np.float32)):
+                if np.isinf(val) or np.isnan(val):
+                    return None
+                return float(val)
+            elif isinstance(val, np.bool_):
+                return bool(val)
+            elif isinstance(val, (np.ndarray, list)):
+                return [clean_value(v) for v in val]
+            else:
+                return val
         
-        for sheet_name in excel_file.sheet_names:
-            df = pd.read_excel(file_path, sheet_name=sheet_name)
-            
-            # 将 NaN 替换为 None，以便 JSON 序列化
+        def clean_data_for_json(df):
+            """清理数据使其可以JSON序列化"""
+            # 替换 inf 和 -inf 为 None
+            df = df.replace([np.inf, -np.inf], None)
+            # 将 NaN 替换为 None
             df = df.where(pd.notnull(df), None)
             
-            # 转换为字典列表
-            sheets_data[sheet_name] = {
-                'columns': df.columns.tolist(),
-                'data': df.values.tolist(),
-                'rows': len(df),
-                'cols': len(df.columns)
-            }
+            # 转换所有值为Python原生类型
+            data = []
+            for row in df.values:
+                cleaned_row = [clean_value(val) for val in row]
+                data.append(cleaned_row)
+            
+            return df.columns.tolist(), data
         
-        return {
-            'sheets': list(sheets_data.keys()),
-            'data': sheets_data
-        }
+        # 判断文件类型
+        file_ext = file_path.suffix.lower()
+        
+        if file_ext == '.csv':
+            # CSV 文件只有一个 sheet
+            df = pd.read_csv(file_path)
+            columns, data = clean_data_for_json(df)
+            
+            sheets_data = {
+                'Sheet1': {
+                    'columns': columns,
+                    'data': data,
+                    'rows': len(data),
+                    'cols': len(columns)
+                }
+            }
+            return {
+                'sheets': ['Sheet1'],
+                'data': sheets_data
+            }
+        else:
+            # Excel 文件可能有多个 sheet
+            excel_file = pd.ExcelFile(file_path)
+            sheets_data = {}
+            
+            for sheet_name in excel_file.sheet_names:
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                columns, data = clean_data_for_json(df)
+                
+                # 转换为字典列表
+                sheets_data[sheet_name] = {
+                    'columns': columns,
+                    'data': data,
+                    'rows': len(data),
+                    'cols': len(columns)
+                }
+            
+            return {
+                'sheets': list(sheets_data.keys()),
+                'data': sheets_data
+            }
         
     except ImportError:
         logger.error("pandas 或 openpyxl 未安装，无法解析 Excel 文件")

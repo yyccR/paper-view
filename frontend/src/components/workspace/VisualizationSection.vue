@@ -1,0 +1,36 @@
+<template>
+  <div class="visualization-section" v-if="visible">
+    <div class="viz-controls">
+      <button class="viz-btn back-to-pdf-btn" @click="$emit('back-to-pdf')" :title="$t('workspace.pdf.backToPaper')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-text">{{ $t('workspace.pdf.backToPaper') }}</span>
+      </button>
+    </div>
+    <div class="visualization-content">
+      <ConnectedPapersGraph 
+        v-if="visualizationData && visualizationData.nodes"
+        :papers="visualizationData.nodes"
+        :edges="visualizationData.edges"
+        :mainPaper="visualizationData.mainPaper"
+      />
+      <WordCloudHeatmap 
+        v-if="wordCloudData && wordCloudData.length > 0"
+        :wordData="wordCloudData"
+      />
+    </div>
+  </div>
+</template>
+<script setup>
+import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
+import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
+
+const props = defineProps({
+  visible: { type: Boolean, default: false },
+  visualizationData: { type: Object, default: null },
+  wordCloudData: { type: Array, default: () => [] }
+})
+const emit = defineEmits(['back-to-pdf'])
+</script>

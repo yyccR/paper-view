@@ -29,7 +29,7 @@
     <input 
       type="file" 
       ref="fileInput"
-      accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" 
+      accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" 
       style="display: none;"
       @change="handleFileChange"
     >
@@ -96,11 +96,11 @@ const handleFileChange = async (event) => {
   if (!file) return
   
   // 验证文件类型
-  const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt']
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt']
   const fileExtension = '.' + file.name.split('.').pop().toLowerCase()
   
   if (!allowedExtensions.includes(fileExtension)) {
-    alert('不支持的文件类型。支持的格式：PDF, Word, Excel, TXT')
+    alert('不支持的文件类型。支持的格式：PDF, Word, Excel, CSV, TXT')
     return
   }
   
