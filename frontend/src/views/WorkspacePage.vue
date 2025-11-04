@@ -147,6 +147,7 @@
         :visible="showVisualization"
         :visualizationData="visualizationData"
         :wordCloudData="wordCloudData"
+        :vosviewerData="vosviewerData"
         @back-to-pdf="backToPdfPreview"
       />
 
@@ -537,6 +538,7 @@ const isProcessing = ref(false)
 const visualizationImage = ref('')
 const visualizationData = ref(null)
 const wordCloudData = ref([])
+const vosviewerData = ref(null)
 const pdfExpanded = ref(false)
 const currentPdfUrl = ref('')
 // 跟踪已加载的可视化模板
@@ -751,6 +753,7 @@ const selectPaper = async (paper) => {
   showVisualization.value = false
   visualizationData.value = null
   wordCloudData.value = []
+  vosviewerData.value = null
   loadedVisualizations.value = []
   pdfBlobUrl.value = ''
   isDownloading.value = true
@@ -825,6 +828,7 @@ const closePdfPreview = () => {
   showPdfPreview.value = false
   showVisualization.value = false
   visualizationData.value = null
+  vosviewerData.value = null
   pdfExpanded.value = false
   // 清空已加载的可视化记录
   loadedVisualizations.value = []
@@ -872,6 +876,7 @@ const applyVisualization = async () => {
       if (response.success && response.data) {
         wordCloudData.value = response.data
         visualizationData.value = null
+        vosviewerData.value = null
         
         // 记录已加载的可视化
         const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -913,6 +918,7 @@ const applyVisualization = async () => {
       // 转换为ConnectedPapers格式
       visualizationData.value = convertToConnectedPapersFormat(papers)
       wordCloudData.value = []
+      vosviewerData.value = null
       console.log('可视化数据:', visualizationData.value)
       console.log('节点数量:', visualizationData.value.nodes.length)
       console.log('边数量:', visualizationData.value.edges.length)
@@ -937,6 +943,46 @@ const applyVisualization = async () => {
       
     } catch (error) {
       console.error('可视化失败:', error)
+      alert(t('workspace.visualization.loadFailed'))
+    } finally {
+      isProcessing.value = false
+    }
+  } else if (templateKey === 'citation_network') {
+    isProcessing.value = true
+    
+    try {
+      // 加载 VOSviewer 网络数据
+      const response = await fetch('/assets/bib/VOSviewer-network.json')
+      const networkData = await response.json()
+      
+      console.log('VOSviewer 网络数据加载成功')
+      console.log('节点数量:', networkData.network?.items?.length || 0)
+      console.log('连接数量:', networkData.network?.links?.length || 0)
+      
+      // 设置 VOSviewer 数据
+      vosviewerData.value = networkData
+      visualizationData.value = null
+      wordCloudData.value = []
+      
+      // 记录已加载的可视化
+      const vizId = `${selectedTemplate.value}-${Date.now()}`
+      if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+        loadedVisualizations.value.push({
+          id: vizId,
+          templateIndex: selectedTemplate.value,
+          templateName: templateName,
+          data: vosviewerData.value
+        })
+      }
+      
+      // 显示可视化
+      showVisualization.value = true
+      pdfExpanded.value = false
+      
+      await nextTick()
+      
+    } catch (error) {
+      console.error('加载 VOSviewer 数据失败:', error)
       alert(t('workspace.visualization.loadFailed'))
     } finally {
       isProcessing.value = false
@@ -997,15 +1043,22 @@ const returnToVisualization = (vizId) => {
     // 如果指定了 vizId，加载对应的可视化
     const viz = loadedVisualizations.value.find(v => v.id === vizId)
     if (viz && viz.data) {
-      // 判断是词云数据还是关系图数据
+      // 判断数据类型
       if (Array.isArray(viz.data) && viz.data.length > 0 && viz.data[0].word) {
         // 词云数据
         wordCloudData.value = viz.data
         visualizationData.value = null
+        vosviewerData.value = null
+      } else if (viz.data.network && viz.data.network.items) {
+        // VOSviewer 网络数据
+        vosviewerData.value = viz.data
+        visualizationData.value = null
+        wordCloudData.value = []
       } else {
         // 关系图数据
         visualizationData.value = viz.data
         wordCloudData.value = []
+        vosviewerData.value = null
       }
     }
   }

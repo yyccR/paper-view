@@ -20,17 +20,23 @@
         v-if="wordCloudData && wordCloudData.length > 0"
         :wordData="wordCloudData"
       />
+      <VOSviewerNetwork
+        v-if="vosviewerData && vosviewerData.network"
+        :networkData="vosviewerData"
+      />
     </div>
   </div>
 </template>
 <script setup>
 import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
 import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
+import VOSviewerNetwork from '@/components/VOSviewerNetwork.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
   visualizationData: { type: Object, default: null },
-  wordCloudData: { type: Array, default: () => [] }
+  wordCloudData: { type: Array, default: () => [] },
+  vosviewerData: { type: Object, default: null }
 })
 const emit = defineEmits(['back-to-pdf'])
 </script>

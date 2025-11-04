@@ -156,6 +156,7 @@ export default {
       'tree_radial': 'Radial Tree',
       'treemap_drip_down': 'Treemap',
       'wordcloud': 'Word Cloud',
+      'citation_network': 'Citation Network',
       // Template descriptions
       descriptions: {
         '3d_bar': '3D visualization for paper data multi-dimensional analysis',
@@ -191,7 +192,8 @@ export default {
         'structure': 'Paper structure or organizational hierarchy diagram',
         'tree_radial': 'Research taxonomy radial tree structure',
         'treemap_drip_down': 'Hierarchical data proportion treemap visualization',
-        'wordcloud': 'Paper keyword frequency word cloud analysis'
+        'wordcloud': 'Paper keyword frequency word cloud analysis',
+        'citation_network': 'Academic literature citation relationship network visualization'
       }
     },
     

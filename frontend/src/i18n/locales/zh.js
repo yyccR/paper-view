@@ -156,6 +156,7 @@ export default {
       'tree_radial': '径向树图',
       'treemap_drip_down': '矩形树图',
       'wordcloud': '词云图',
+      'citation_network': '文献引用网络',
       // 模板描述
       descriptions: {
         '3d_bar': '立体展示论文数据多维度对比分析',
@@ -191,7 +192,8 @@ export default {
         'structure': '论文结构或组织层次关系图谱',
         'tree_radial': '研究分类体系径向树状结构图',
         'treemap_drip_down': '层次数据占比矩形树图可视化',
-        'wordcloud': '论文关键词频率词云图分析'
+        'wordcloud': '论文关键词频率词云图分析',
+        'citation_network': '学术文献引用关系网络可视化展示'
       }
     },
     
