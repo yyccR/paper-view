@@ -148,6 +148,7 @@
         :visualizationData="visualizationData"
         :wordCloudData="wordCloudData"
         :vosviewerData="vosviewerData"
+        :densityData="densityData"
         @back-to-pdf="backToPdfPreview"
       />
 
@@ -539,6 +540,7 @@ const visualizationImage = ref('')
 const visualizationData = ref(null)
 const wordCloudData = ref([])
 const vosviewerData = ref(null)
+const densityData = ref(null)
 const pdfExpanded = ref(false)
 const currentPdfUrl = ref('')
 // 跟踪已加载的可视化模板
@@ -754,6 +756,7 @@ const selectPaper = async (paper) => {
   visualizationData.value = null
   wordCloudData.value = []
   vosviewerData.value = null
+  densityData.value = null
   loadedVisualizations.value = []
   pdfBlobUrl.value = ''
   isDownloading.value = true
@@ -829,6 +832,7 @@ const closePdfPreview = () => {
   showVisualization.value = false
   visualizationData.value = null
   vosviewerData.value = null
+  densityData.value = null
   pdfExpanded.value = false
   // 清空已加载的可视化记录
   loadedVisualizations.value = []
@@ -877,6 +881,7 @@ const applyVisualization = async () => {
         wordCloudData.value = response.data
         visualizationData.value = null
         vosviewerData.value = null
+        densityData.value = null
         
         // 记录已加载的可视化
         const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -919,6 +924,7 @@ const applyVisualization = async () => {
       visualizationData.value = convertToConnectedPapersFormat(papers)
       wordCloudData.value = []
       vosviewerData.value = null
+      densityData.value = null
       console.log('可视化数据:', visualizationData.value)
       console.log('节点数量:', visualizationData.value.nodes.length)
       console.log('边数量:', visualizationData.value.edges.length)
@@ -963,6 +969,7 @@ const applyVisualization = async () => {
       vosviewerData.value = networkData
       visualizationData.value = null
       wordCloudData.value = []
+      densityData.value = null
       
       // 记录已加载的可视化
       const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -983,6 +990,46 @@ const applyVisualization = async () => {
       
     } catch (error) {
       console.error('加载 VOSviewer 数据失败:', error)
+      alert(t('workspace.visualization.loadFailed'))
+    } finally {
+      isProcessing.value = false
+    }
+  } else if (templateKey === 'heatmap') {
+    isProcessing.value = true
+    
+    try {
+      // 加载 VOSviewer 网络数据用于密度可视化
+      const response = await fetch('/assets/bib/VOSviewer-network.json')
+      const networkData = await response.json()
+      
+      console.log('加载密度可视化数据成功')
+      console.log('节点数量:', networkData.network?.items?.length || 0)
+      
+      // 设置密度数据
+      densityData.value = networkData
+      visualizationData.value = null
+      wordCloudData.value = []
+      vosviewerData.value = null
+      
+      // 记录已加载的可视化
+      const vizId = `${selectedTemplate.value}-${Date.now()}`
+      if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+        loadedVisualizations.value.push({
+          id: vizId,
+          templateIndex: selectedTemplate.value,
+          templateName: templateName,
+          data: densityData.value
+        })
+      }
+      
+      // 显示可视化
+      showVisualization.value = true
+      pdfExpanded.value = false
+      
+      await nextTick()
+      
+    } catch (error) {
+      console.error('加载密度可视化数据失败:', error)
       alert(t('workspace.visualization.loadFailed'))
     } finally {
       isProcessing.value = false
@@ -1049,16 +1096,32 @@ const returnToVisualization = (vizId) => {
         wordCloudData.value = viz.data
         visualizationData.value = null
         vosviewerData.value = null
+        densityData.value = null
       } else if (viz.data.network && viz.data.network.items) {
-        // VOSviewer 网络数据
-        vosviewerData.value = viz.data
-        visualizationData.value = null
-        wordCloudData.value = []
+        // 检查是否为密度可视化或VOSviewer网络数据
+        // 根据templateName区分（heatmap对应密度可视化）
+        const imageName = thumbnails.value[viz.templateIndex]
+        const templateKey = imageName?.replace('.png', '')
+        
+        if (templateKey === 'heatmap') {
+          // 密度可视化数据
+          densityData.value = viz.data
+          visualizationData.value = null
+          wordCloudData.value = []
+          vosviewerData.value = null
+        } else {
+          // VOSviewer 网络数据
+          vosviewerData.value = viz.data
+          visualizationData.value = null
+          wordCloudData.value = []
+          densityData.value = null
+        }
       } else {
         // 关系图数据
         visualizationData.value = viz.data
         wordCloudData.value = []
         vosviewerData.value = null
+        densityData.value = null
       }
     }
   }

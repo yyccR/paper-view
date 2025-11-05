@@ -226,6 +226,21 @@ export default {
     veryLow: 'Very Low'
   },
   
+  densityViz: {
+    kernelSize: 'Kernel Size',
+    resolution: 'Resolution',
+    resolutionHigh: 'High',
+    resolutionMedium: 'Medium',
+    resolutionLow: 'Low',
+    showLabels: 'Show Labels',
+    reset: 'Reset View',
+    density: 'Density',
+    low: 'Low',
+    high: 'High',
+    citations: 'Citations',
+    avgCitations: 'Avg. Citations'
+  },
+  
   paperGraph: {
     // Paper list
     paperList: {

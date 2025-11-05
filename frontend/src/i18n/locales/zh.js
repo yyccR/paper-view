@@ -226,6 +226,21 @@ export default {
     veryLow: '极低'
   },
   
+  densityViz: {
+    kernelSize: '核大小',
+    resolution: '分辨率',
+    resolutionHigh: '高',
+    resolutionMedium: '中',
+    resolutionLow: '低',
+    showLabels: '显示标签',
+    reset: '重置视图',
+    density: '密度',
+    low: '低',
+    high: '高',
+    citations: '引用数',
+    avgCitations: '平均引用数'
+  },
+  
   paperGraph: {
     // 论文列表
     paperList: {
