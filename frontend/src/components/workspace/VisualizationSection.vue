@@ -20,7 +20,7 @@
         v-if="wordCloudData && wordCloudData.length > 0"
         :wordData="wordCloudData"
       />
-      <VOSviewerNetwork
+      <CitationNetwork
         v-if="vosviewerData && vosviewerData.network"
         :networkData="vosviewerData"
       />
@@ -30,7 +30,7 @@
 <script setup>
 import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
 import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
-import VOSviewerNetwork from '@/components/VOSviewerNetwork.vue'
+import CitationNetwork from '@/components/CitationNetwork.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },

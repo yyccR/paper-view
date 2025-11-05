@@ -1,65 +1,13 @@
 <template>
-  <div class="vosviewer-network">
-    <div class="network-controls">
-      <div class="control-group">
-        <label>{{ $t('wordcloud.zoom') }}</label>
-        <div class="zoom-controls">
-          <button @click="zoomIn" class="control-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button @click="zoomOut" class="control-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button @click="resetView" class="control-btn">
-            {{ $t('wordcloud.reset') }}
-          </button>
-        </div>
-      </div>
-      
-      <div class="info-panel" v-if="selectedNode || hoveredNode">
-        <h4>{{ (selectedNode || hoveredNode).label }}</h4>
-        <div class="node-stats">
-          <div class="stat-item">
-            <span class="stat-label">Documents:</span>
-            <span class="stat-value">{{ (selectedNode || hoveredNode).weights?.Documents || 0 }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Citations:</span>
-            <span class="stat-value">{{ (selectedNode || hoveredNode).weights?.Citations || 0 }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Avg. Citations:</span>
-            <span class="stat-value">{{ (selectedNode || hoveredNode).scores?.['Avg. citations']?.toFixed(1) || 'N/A' }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Avg. Year:</span>
-            <span class="stat-value">{{ (selectedNode || hoveredNode).scores?.['Avg. pub. year']?.toFixed(0) || 'N/A' }}</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">Cluster:</span>
-            <span class="stat-value" :style="{ color: getClusterColor((selectedNode || hoveredNode).cluster) }">
-              #{{ (selectedNode || hoveredNode).cluster }}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-    
+  <div class="citation-network">
     <div class="network-canvas-wrapper" ref="canvasWrapper">
       <canvas ref="canvas" @mousedown="onMouseDown" @mousemove="onMouseMove" @mouseup="onMouseUp" @wheel="onWheel"></canvas>
-    </div>
-    
-    <div class="legend">
-      <div class="legend-title">Clusters</div>
-      <div class="legend-items">
-        <div v-for="cluster in uniqueClusters" :key="cluster" class="legend-item">
-          <span class="legend-color" :style="{ backgroundColor: getClusterColor(cluster) }"></span>
-          <span class="legend-label">Cluster {{ cluster }}</span>
-        </div>
+      
+      <div class="hover-info" v-if="hoveredNode" :style="{ left: hoverInfoX + 'px', top: hoverInfoY + 'px' }">
+        <div class="info-title">{{ hoveredNode.label }}</div>
+        <div class="info-row">Citations: <strong>{{ hoveredNode.weights?.Citations || 0 }}</strong></div>
+        <div class="info-row">Avg. Citations: <strong>{{ hoveredNode.scores?.['Avg. citations']?.toFixed(1) || 'N/A' }}</strong></div>
+        <div class="info-row">Avg. Year: <strong>{{ hoveredNode.scores?.['Avg. pub. year']?.toFixed(0) || 'N/A' }}</strong></div>
       </div>
     </div>
   </div>
@@ -80,12 +28,15 @@ const canvasWrapper = ref(null)
 const ctx = ref(null)
 const selectedNode = ref(null)
 const hoveredNode = ref(null)
+const hoverInfoX = ref(0)
+const hoverInfoY = ref(0)
 
 // 视图状态
 const viewState = ref({
   offsetX: 0,
   offsetY: 0,
   scale: 1,
+  baseScale: 1,
   isDragging: false,
   dragStartX: 0,
   dragStartY: 0,
@@ -122,6 +73,124 @@ const hexToRgba = (hex, alpha) => {
   const g = parseInt(hex.slice(3, 5), 16)
   const b = parseInt(hex.slice(5, 7), 16)
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+const darkenColor = (hex, factor = 0.3) => {
+  // 将颜色变暗 - 类似VOSviewer的_calcDarkColor
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  
+  const newR = Math.floor(r * (1 - factor))
+  const newG = Math.floor(g * (1 - factor))
+  const newB = Math.floor(b * (1 - factor))
+  
+  return `rgb(${newR}, ${newG}, ${newB})`
+}
+
+// ====== 对齐 VOSviewer 的标签绘制逻辑 ======
+const labelColorsCfg = {
+  LIGHT_BACKGROUND: 'black',
+  ALPHA_DEFAULT: 0.8,
+  ALPHA_HIGHLIGHTED: 0.9,
+  ALPHA_DIMMED: 0.3
+}
+
+const ItemStatus = {
+  HOVERED: 'hovered',
+  SELECTED: 'selected',
+  HIGHLIGHTED: 'highlighted',
+  DEFAULT: 'default'
+}
+
+const fontFamily = 'Roboto, Arial, sans-serif'
+
+// 基于节点权重计算字体大小、文本宽度与圆半径
+const computeNodeMetrics = () => {
+  if (!ctx.value) return
+  const weights = nodes.value.map(n => (n.weights?.Citations || 0) + (n.weights?.Documents || 0))
+  const meanWeight = weights.length ? (weights.reduce((a, b) => a + b, 0) / weights.length) : 1
+
+  nodes.value.forEach(node => {
+    const citations = node.weights?.Citations || 0
+    const documents = node.weights?.Documents || 0
+    const w = citations + documents
+    const normalized = meanWeight > 0 ? w / meanWeight : 1
+    node._normalizedWeight = normalized
+
+    // 半径与现有实现保持一致，确保视觉一致性
+    const radius = Math.sqrt(citations + (documents || 1) * 10) * 0.8 + 3
+    node._circleRadius = radius
+
+    // 字号与 VOSviewer 参数类似（9px 基础 + 依据权重的放大）
+    node._fontSize = 8 + 3 * Math.pow(normalized, 0.5)
+    ctx.value.font = `${Math.round(node._fontSize)}px ${fontFamily}`
+    node._labelText = node.label || ''
+    node._labelTextWidth = ctx.value.measureText(node._labelText).width
+  })
+}
+
+// 计算标签缩放因子（使用屏幕坐标，阈值比较为 < 1）
+const updateLabelScalingFactors = () => {
+  const sorted = [...nodes.value].sort((a, b) => b._circleRadius - a._circleRadius)
+  sorted.forEach((item1, i) => {
+    item1._labelScalingFactor = 0
+    for (let j = 0; j < i; j++) {
+      const item2 = sorted[j]
+      const xDen = Math.abs((item1.screenX) - (item2.screenX)) || 0.1
+      const yDen = Math.abs((item1.screenY) - (item2.screenY)) || 0.1
+      const xFactor = (0.5 * (item1._labelTextWidth + item2._labelTextWidth + 2)) / xDen
+      const yFactor = (0.5 * (item1._fontSize + item2._fontSize + 2)) / yDen
+      const labelScalingFactor = Math.min(xFactor, yFactor)
+      if (labelScalingFactor > (item1._labelScalingFactor || 0) && labelScalingFactor > (item2._labelScalingFactor || 0)) {
+        item1._labelScalingFactor = labelScalingFactor
+      }
+    }
+  })
+}
+
+// 更新节点状态（默认/高亮/悬浮/选中）
+const updateItemStatuses = () => {
+  const hovered = hoveredNode.value
+  const clicked = selectedNode.value
+  const highlightedSet = new Set()
+
+  if (hovered) {
+    const connected = nodeConnections.value.get(hovered.id) || new Set()
+    connected.forEach(id => highlightedSet.add(id))
+  }
+  if (clicked) {
+    const connected = nodeConnections.value.get(clicked.id) || new Set()
+    connected.forEach(id => highlightedSet.add(id))
+  }
+
+  nodes.value.forEach(item => {
+    if (clicked && item.id === clicked.id) item._status = ItemStatus.SELECTED
+    else if (hovered && item.id === hovered.id) item._status = ItemStatus.HOVERED
+    else if (highlightedSet.has(item.id)) item._status = ItemStatus.HIGHLIGHTED
+    else item._status = ItemStatus.DEFAULT
+  })
+}
+
+// 绘制标签（透明度规则与 VOSviewer 对齐）
+const drawLabel = (context, node, status, dimmed) => {
+  const color = labelColorsCfg.LIGHT_BACKGROUND
+  let alpha = labelColorsCfg.ALPHA_DEFAULT
+  switch (status) {
+    case ItemStatus.DEFAULT:
+      alpha = dimmed ? labelColorsCfg.ALPHA_DIMMED : labelColorsCfg.ALPHA_DEFAULT
+      break
+    case ItemStatus.HIGHLIGHTED:
+    case ItemStatus.SELECTED:
+    case ItemStatus.HOVERED:
+      alpha = labelColorsCfg.ALPHA_HIGHLIGHTED
+      break
+    default:
+      break
+  }
+  context.font = `${Math.round(node._fontSize)}px ${fontFamily}`
+  context.fillStyle = `rgba(0, 0, 0, ${alpha})`
+  context.fillText(node._labelText, node.screenX, node.screenY)
 }
 
 const initCanvas = () => {
@@ -173,17 +242,20 @@ const initCanvas = () => {
     const centerX = (minX + maxX) / 2
     const centerY = (minY + maxY) / 2
     
-    // 计算合适的缩放比例
-    const padding = 100
+    // 计算合适的缩放比例 - 增加间距
+    const padding = 150
     const scaleX = (canvas.value.width - padding * 2) / dataWidth
     const scaleY = (canvas.value.height - padding * 2) / dataHeight
-    viewState.value.scale = Math.min(scaleX, scaleY, 1000) // 限制最大缩放
+    viewState.value.scale = Math.min(scaleX, scaleY, 600) * 1.2 // 减小初始缩放比例以增加节点间距
+    viewState.value.baseScale = viewState.value.scale
     
     // 居中偏移
     viewState.value.offsetX = canvas.value.width / 2
     viewState.value.offsetY = canvas.value.height / 2
   }
-  
+  // 初始化字体度量
+  computeNodeMetrics()
+
   render()
 }
 
@@ -219,6 +291,12 @@ const render = () => {
     node.screenX = screen.x
     node.screenY = screen.y
   })
+
+  // 更新标签缩放因子与状态
+  updateLabelScalingFactors()
+  updateItemStatuses()
+  const zK = Math.min(200, Math.max(0.5, viewState.value.baseScale ? (viewState.value.scale / viewState.value.baseScale) : 1))
+  const dimmed = !!(hoveredNode.value || selectedNode.value)
   
   // 绘制链接（曲线）
   if (links.value.length > 0) {
@@ -230,28 +308,30 @@ const render = () => {
         const isHighlighted = hoveredNode.value && 
           (source.id === hoveredNode.value.id || target.id === hoveredNode.value.id)
         
-        // 根据连接强度设置透明度
+        // 根据连接强度设置透明度 - 使用VOSviewer的透明度策略
         const strength = link.strength || 1
-        const baseOpacity = isHighlighted ? 0.6 : 0.15
-        const opacity = Math.min(baseOpacity * strength, 0.8)
+        const baseOpacity = isHighlighted ? 0.8 : 0.4 // VOSviewer: ALPHA_HIGHLIGHTED: 0.8, ALPHA_DEFAULT: 0.4
+        const opacity = Math.min(baseOpacity * strength, 0.9)
         
+        // 使用更柔和的灰色
         context.strokeStyle = isHighlighted 
-          ? `rgba(100, 100, 100, ${opacity})`
-          : `rgba(180, 180, 180, ${opacity})`
-        context.lineWidth = isHighlighted ? 2 : 1
+          ? `rgba(120, 120, 120, ${opacity})`
+          : `rgba(200, 200, 200, ${opacity})`
+        context.lineWidth = isHighlighted ? 1.2 : 1
         
         // 绘制贝塞尔曲线
         const dx = target.screenX - source.screenX
         const dy = target.screenY - source.screenY
         const distance = Math.sqrt(dx * dx + dy * dy)
         
-        // 控制点偏移（产生曲线效果）
-        const curvature = 0.2 // 曲率系数
-        const offsetX = -dy * curvature * (distance / 100)
-        const offsetY = dx * curvature * (distance / 100)
+        // 控制点偏移 - 使用VOSviewer的曲线算法
+        const alpha = 0.3 // VOSviewer的曲率参数
+        const sign = -1
+        const xm = (source.screenX + target.screenX) / 2
+        const ym = (source.screenY + target.screenY) / 2
         
-        const cpX = (source.screenX + target.screenX) / 2 + offsetX
-        const cpY = (source.screenY + target.screenY) / 2 + offsetY
+        const cpX = xm + sign * alpha * (target.screenY - source.screenY)
+        const cpY = ym - sign * alpha * (target.screenX - source.screenX)
         
         context.beginPath()
         context.moveTo(source.screenX, source.screenY)
@@ -263,31 +343,19 @@ const render = () => {
   
   // 绘制节点
   nodes.value.forEach(node => {
-    // 根据引用数和文档数计算节点大小
+    // 根据引用数和文档数计算节点大小 - 减小节点尺寸
     const citations = node.weights?.Citations || 0
     const documents = node.weights?.Documents || 1
-    const size = Math.sqrt(citations + documents * 10) * 2 + 6
+    const size = Math.sqrt(citations + documents * 10) * 0.8 + 3
     
     const color = getClusterColor(node.cluster)
     
-    // 判断节点是否应该高亮或变暗
-    let opacity = 0.7 // 默认透明度
-    let isHighlighted = false
-    
-    if (hoveredNode.value) {
-      if (node.id === hoveredNode.value.id) {
-        // 当前悬浮节点
-        opacity = 1
-        isHighlighted = true
-      } else if (nodeConnections.value.get(hoveredNode.value.id)?.has(node.id)) {
-        // 相关节点
-        opacity = 0.8
-        isHighlighted = true
-      } else {
-        // 不相关节点变暗
-        opacity = 0.15
-      }
-    }
+    // 判断节点是否应该高亮或变暗 - 使用VOSviewer的透明度策略
+    let opacity = 0.7 // 默认透明度 (VOSviewer: ALPHA_DEFAULT)
+    const status = node._status || ItemStatus.DEFAULT
+    const isHighlighted = status === ItemStatus.HOVERED || status === ItemStatus.SELECTED || status === ItemStatus.HIGHLIGHTED
+    if (isHighlighted) opacity = 1.0
+    else if (dimmed) opacity = 0.2
     
     // 节点圆圈外部光晕（高亮时）
     if (isHighlighted) {
@@ -311,51 +379,63 @@ const render = () => {
     context.arc(node.screenX, node.screenY, size, 0, Math.PI * 2)
     context.fill()
     
-    // 节点边框（高亮时更明显）
+    // 节点边框 - 使用VOSviewer的边框策略（高亮时更明显）
     if (isHighlighted) {
-      context.strokeStyle = color
-      context.lineWidth = 2
+      // 使用更深的颜色作为边框
+      const borderColor = darkenColor(color, 0.3)
+      context.strokeStyle = borderColor
+      context.lineWidth = 1.5
       context.beginPath()
       context.arc(node.screenX, node.screenY, size, 0, Math.PI * 2)
       context.stroke()
     }
     
-    // 高亮选中节点
-    if (selectedNode.value && selectedNode.value.id === node.id) {
-      context.strokeStyle = '#333'
-      context.lineWidth = 3
+    // 高亮选中节点 - 使用VOSviewer的双重边框效果
+    if (status === ItemStatus.SELECTED) {
+      // 内层边框
+      const borderColor = darkenColor(color, 0.3)
+      context.strokeStyle = borderColor
+      context.lineWidth = 1.5
       context.beginPath()
-      context.arc(node.screenX, node.screenY, size + 3, 0, Math.PI * 2)
+      context.arc(node.screenX, node.screenY, size, 0, Math.PI * 2)
+      context.stroke()
+      
+      // 外层边框（VOSviewer的双重边框效果）
+      context.strokeStyle = borderColor
+      context.lineWidth = 2
+      context.beginPath()
+      context.arc(node.screenX, node.screenY, size + 6, 0, Math.PI * 2)
       context.stroke()
     }
-    
-    // 节点标签 - 显示较大节点、悬浮节点或选中节点的标签
-    const showLabel = size > 10 || 
-      (hoveredNode.value && node.id === hoveredNode.value.id) ||
-      (selectedNode.value && selectedNode.value.id === node.id)
-    
-    if (showLabel && viewState.value.scale > 400) {
-      context.fillStyle = isHighlighted ? '#000' : '#666'
-      context.font = isHighlighted ? 'bold 12px Arial' : '11px Arial'
-      context.textAlign = 'center'
-      context.textBaseline = 'top'
-      
-      // 文字背景（提高可读性）
-      if (isHighlighted) {
-        const textWidth = context.measureText(node.label).width
-        context.fillStyle = 'rgba(255, 255, 255, 0.9)'
-        context.fillRect(
-          node.screenX - textWidth / 2 - 4,
-          node.screenY + size + 6,
-          textWidth + 8,
-          16
-        )
-        context.fillStyle = '#000'
-      }
-      
-      context.fillText(node.label, node.screenX, node.screenY + size + 8)
-    }
   })
+
+  // 分层绘制标签（中心对齐）
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  // 默认项
+  for (let i = nodes.value.length - 1; i >= 0; i--) {
+    const n = nodes.value[i]
+    if ((n._labelScalingFactor || 0) < zK && (n._status === ItemStatus.DEFAULT || !n._status)) {
+      drawLabel(context, n, ItemStatus.DEFAULT, dimmed)
+    }
+  }
+  // 高亮项（相邻/联通）
+  for (let i = nodes.value.length - 1; i >= 0; i--) {
+    const n = nodes.value[i]
+    if ((n._labelScalingFactor || 0) < zK && n._status === ItemStatus.HIGHLIGHTED) {
+      drawLabel(context, n, ItemStatus.HIGHLIGHTED, dimmed)
+    }
+  }
+  // 选中项
+  if (selectedNode.value) {
+    const n = nodes.value.find(x => x.id === selectedNode.value.id)
+    if (n) drawLabel(context, n, ItemStatus.SELECTED, dimmed)
+  }
+  // 悬浮项
+  if (hoveredNode.value) {
+    const n = nodes.value.find(x => x.id === hoveredNode.value.id)
+    if (n) drawLabel(context, n, ItemStatus.HOVERED, dimmed)
+  }
 }
 
 const getNodeAtPosition = (x, y) => {
@@ -364,7 +444,7 @@ const getNodeAtPosition = (x, y) => {
     const node = nodes.value[i]
     const citations = node.weights?.Citations || 0
     const documents = node.weights?.Documents || 1
-    const size = Math.sqrt(citations + documents * 10) * 2 + 6
+    const size = Math.sqrt(citations + documents * 10) * 0.8 + 3
     const dx = x - node.screenX
     const dy = y - node.screenY
     const distance = Math.sqrt(dx * dx + dy * dy)
@@ -415,6 +495,13 @@ const onMouseMove = (e) => {
     if (node !== hoveredNode.value) {
       hoveredNode.value = node
       canvas.value.style.cursor = node ? 'pointer' : 'move'
+      
+      // 更新悬浮信息位置（右下角）
+      if (node) {
+        hoverInfoX.value = canvas.value.width - 220
+        hoverInfoY.value = canvas.value.height - 120
+      }
+      
       render()
     }
   }
@@ -477,6 +564,7 @@ const resetView = () => {
     const scaleX = (canvas.value.width - padding * 2) / dataWidth
     const scaleY = (canvas.value.height - padding * 2) / dataHeight
     viewState.value.scale = Math.min(scaleX, scaleY, 1000)
+    viewState.value.baseScale = viewState.value.scale
     
     viewState.value.offsetX = canvas.value.width / 2
     viewState.value.offsetY = canvas.value.height / 2
@@ -489,6 +577,7 @@ const handleResize = () => {
   if (canvas.value && canvasWrapper.value) {
     canvas.value.width = canvasWrapper.value.clientWidth
     canvas.value.height = canvasWrapper.value.clientHeight
+    computeNodeMetrics()
     render()
   }
 }
@@ -512,107 +601,49 @@ watch(() => props.networkData, () => {
 </script>
 
 <style scoped>
-.vosviewer-network {
+.citation-network {
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
   background: #fafafa;
   position: relative;
 }
 
-.network-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 15px 20px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.control-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #555;
-}
-
-.zoom-controls {
-  display: flex;
-  gap: 5px;
-}
-
-.control-btn {
-  padding: 6px 12px;
+.hover-info {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid #ddd;
-  background: white;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.control-btn:hover {
-  background: #f5f5f5;
-  border-color: #999;
-}
-
-.control-btn svg {
-  display: block;
-}
-
-.info-panel {
-  flex: 1;
-  padding: 10px 15px;
-  background: #f8f9fa;
   border-radius: 6px;
-  min-width: 250px;
-  max-width: 400px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  z-index: 1000;
+  min-width: 200px;
+  backdrop-filter: blur(8px);
 }
 
-.info-panel h4 {
-  margin: 0 0 10px 0;
-  font-size: 15px;
+.info-title {
+  font-size: 13px;
   font-weight: 600;
   color: #333;
+  margin-bottom: 6px;
+  line-height: 1.2;
 }
 
-.node-stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.stat-label {
+.info-row {
   font-size: 11px;
   color: #666;
-  font-weight: 500;
+  margin: 2px 0;
+  line-height: 1.3;
 }
 
-.stat-value {
-  font-size: 14px;
-  font-weight: 600;
+.info-row strong {
   color: #333;
+  font-weight: 600;
 }
 
 .network-canvas-wrapper {
-  flex: 1;
+  width: 100%;
+  height: 100%;
   position: relative;
   overflow: hidden;
 }
@@ -623,48 +654,4 @@ watch(() => props.networkData, () => {
   background: linear-gradient(to bottom, #fafafa 0%, #f5f5f5 100%);
 }
 
-.legend {
-  position: absolute;
-  top: 80px;
-  right: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  max-height: 400px;
-  overflow-y: auto;
-  backdrop-filter: blur(10px);
-}
-
-.legend-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 8px;
-}
-
-.legend-items {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #555;
-}
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.legend-label {
-  white-space: nowrap;
-}
 </style>
