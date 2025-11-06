@@ -157,6 +157,7 @@ export default {
       'treemap_drip_down': '矩形树图',
       'wordcloud': '词云图',
       'citation_network': '文献引用网络',
+      'density-network': '密度网络图',
       // 模板描述
       descriptions: {
         '3d_bar': '立体展示论文数据多维度对比分析',
@@ -186,20 +187,19 @@ export default {
         'paper_map': '文献主题聚类地图分布可视化',
         'pie': '研究样本或类别占比饼图展示',
         'plot_basic_m6a_exp_scatter_plot': 'm6A修饰位点表达差异散点图',
-        'plot_basic_scatter_with_marginal_histograms_plot': '散点分布图附边缘频数直方图',
         'scatter': '论文变量相关性分析散点可视化',
         'scatter2': '实验数据二维空间分布散点图',
         'structure': '论文结构或组织层次关系图谱',
         'tree_radial': '研究分类体系径向树状结构图',
         'treemap_drip_down': '层次数据占比矩形树图可视化',
-        'wordcloud': '论文关键词频率词云图分析',
-        'citation_network': '学术文献引用关系网络可视化展示'
+        'wordcloud': '论文关键词与主题词云图可视化',
+        'citation_network': '学术文献引用关系网络结构图',
+        'density-network': '文献分布密度热力网络可视化'
       }
     },
     
     // PDF预览
     pdf: {
-      downloading: '下载中...',
       preparing: '准备预览PDF...',
       backToPaper: '论文'
     },

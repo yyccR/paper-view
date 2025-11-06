@@ -994,7 +994,7 @@ const applyVisualization = async () => {
     } finally {
       isProcessing.value = false
     }
-  } else if (templateKey === 'heatmap') {
+  } else if (templateKey === 'density-network') {
     isProcessing.value = true
     
     try {
@@ -1099,11 +1099,11 @@ const returnToVisualization = (vizId) => {
         densityData.value = null
       } else if (viz.data.network && viz.data.network.items) {
         // 检查是否为密度可视化或VOSviewer网络数据
-        // 根据templateName区分（heatmap对应密度可视化）
+        // 根据templateName区分（density-network对应密度可视化）
         const imageName = thumbnails.value[viz.templateIndex]
         const templateKey = imageName?.replace('.png', '')
         
-        if (templateKey === 'heatmap') {
+        if (templateKey === 'density-network') {
           // 密度可视化数据
           densityData.value = viz.data
           visualizationData.value = null

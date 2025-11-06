@@ -1,50 +1,20 @@
 <template>
   <div class="density-visualization">
-    <!-- 控制面板 -->
-    <div class="density-controls">
-      <div class="control-group">
-        <label>{{ $t('densityViz.kernelSize') }}:</label>
-        <input type="range" v-model.number="kernelSize" min="20" max="100" step="5" @input="updateDensity" />
-        <span>{{ kernelSize }}</span>
-      </div>
-      <div class="control-group">
-        <label>{{ $t('densityViz.resolution') }}:</label>
-        <select v-model.number="resolution" @change="updateDensity">
-          <option :value="1">{{ $t('densityViz.resolutionHigh') }}</option>
-          <option :value="2">{{ $t('densityViz.resolutionMedium') }}</option>
-          <option :value="3">{{ $t('densityViz.resolutionLow') }}</option>
-        </select>
-      </div>
-      <div class="control-group">
-        <label>
-          <input type="checkbox" v-model="showLabels" @change="render" />
-          {{ $t('densityViz.showLabels') }}
-        </label>
-      </div>
-      <div class="control-group">
-        <button @click="resetView" class="reset-btn">{{ $t('densityViz.reset') }}</button>
-      </div>
-    </div>
-
-    <!-- Canvas画布 -->
+    <!-- Canvas画布 - WebGL用于密度图 -->
     <div class="canvas-wrapper" ref="canvasWrapper">
-      <canvas ref="canvas" @mousedown="onMouseDown" @mousemove="onMouseMove" @mouseup="onMouseUp" @wheel="onWheel"></canvas>
+      <canvas ref="glCanvas" class="gl-canvas"></canvas>
+      <canvas ref="overlayCanvas" class="overlay-canvas" 
+        @mousedown="onMouseDown" 
+        @mousemove="onMouseMove" 
+        @mouseup="onMouseUp" 
+        @wheel="onWheel">
+      </canvas>
       
       <!-- 悬浮信息 -->
       <div class="hover-info" v-if="hoveredNode" :style="{ left: hoverInfoX + 'px', top: hoverInfoY + 'px' }">
         <div class="info-title">{{ hoveredNode.label }}</div>
         <div class="info-row">{{ $t('densityViz.citations') }}: <strong>{{ hoveredNode.weights?.Citations || 0 }}</strong></div>
         <div class="info-row">{{ $t('densityViz.avgCitations') }}: <strong>{{ hoveredNode.scores?.['Avg. citations']?.toFixed(1) || 'N/A' }}</strong></div>
-      </div>
-    </div>
-
-    <!-- 颜色图例 -->
-    <div class="color-legend">
-      <div class="legend-title">{{ $t('densityViz.density') }}</div>
-      <div class="legend-gradient"></div>
-      <div class="legend-labels">
-        <span>{{ $t('densityViz.low') }}</span>
-        <span>{{ $t('densityViz.high') }}</span>
       </div>
     </div>
   </div>
@@ -63,16 +33,22 @@ const props = defineProps({
   }
 })
 
-const canvas = ref(null)
+const glCanvas = ref(null)
+const overlayCanvas = ref(null)
 const canvasWrapper = ref(null)
-const ctx = ref(null)
+const gl = ref(null)
+const overlayCtx = ref(null)
 const hoveredNode = ref(null)
 const hoverInfoX = ref(0)
 const hoverInfoY = ref(0)
 
+// WebGL程序和资源
+const shaderProgram = ref(null)
+const positionBuffer = ref(null)
+const maxDensity = ref(1.0)
+
 // 控制参数
 const kernelSize = ref(50) // 高斯核大小
-const resolution = ref(2) // 密度计算分辨率（1=高, 2=中, 3=低）
 const showLabels = ref(true) // 是否显示标签
 
 // 视图状态
@@ -90,97 +66,169 @@ const viewState = ref({
 
 // 节点数据
 const nodes = ref([])
-const densityMap = ref(null)
-const densityWidth = ref(0)
-const densityHeight = ref(0)
 
-// VOSviewer风格的颜色映射（蓝色→绿色→黄色→红色）
-const getDensityColor = (density) => {
-  // density: 0-1之间的归一化值
-  const colors = [
-    { pos: 0.0, r: 0, g: 0, b: 255 },      // 深蓝色 (低密度)
-    { pos: 0.25, r: 0, g: 255, b: 255 },   // 青色
-    { pos: 0.5, r: 0, g: 255, b: 0 },      // 绿色
-    { pos: 0.75, r: 255, g: 255, b: 0 },   // 黄色
-    { pos: 1.0, r: 255, g: 0, b: 0 }       // 红色 (高密度)
-  ]
+// WebGL着色器代码
+const vertexShaderSource = `
+  attribute vec2 a_position;
+  varying vec2 v_texCoord;
   
-  // 找到对应的颜色区间
-  for (let i = 0; i < colors.length - 1; i++) {
-    if (density >= colors[i].pos && density <= colors[i + 1].pos) {
-      const t = (density - colors[i].pos) / (colors[i + 1].pos - colors[i].pos)
-      const r = Math.round(colors[i].r + t * (colors[i + 1].r - colors[i].r))
-      const g = Math.round(colors[i].g + t * (colors[i + 1].g - colors[i].g))
-      const b = Math.round(colors[i].b + t * (colors[i + 1].b - colors[i].b))
-      return { r, g, b }
+  void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+    v_texCoord = (a_position + 1.0) / 2.0;
+  }
+`
+
+const fragmentShaderSource = `
+  precision highp float;
+  
+  varying vec2 v_texCoord;
+  uniform vec2 u_resolution;
+  uniform vec2 u_nodePositions[100];
+  uniform float u_nodeWeights[100];
+  uniform int u_nodeCount;
+  uniform float u_sigma;
+  uniform float u_maxDensity;
+  
+  // VOSviewer颜色映射
+  vec3 getDensityColor(float density) {
+    if (density < 0.25) {
+      float t = density / 0.25;
+      return mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), t);
+    } else if (density < 0.5) {
+      float t = (density - 0.25) / 0.25;
+      return mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), t);
+    } else if (density < 0.75) {
+      float t = (density - 0.5) / 0.25;
+      return mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), t);
+    } else {
+      float t = (density - 0.75) / 0.25;
+      return mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), t);
     }
   }
-  return { r: 255, g: 0, b: 0 }
+  
+  void main() {
+    vec2 pixelPos = v_texCoord * u_resolution;
+    float density = 0.0;
+    
+    // 计算所有节点对当前像素的密度贡献
+    for (int i = 0; i < 100; i++) {
+      if (i >= u_nodeCount) break;
+      
+      vec2 nodePos = u_nodePositions[i];
+      float dist = distance(pixelPos, nodePos);
+      float weight = u_nodeWeights[i];
+      
+      // 高斯核
+      density += weight * exp(-(dist * dist) / (2.0 * u_sigma * u_sigma));
+    }
+    
+    // 使用平方根增强对比度，让低密度区域也能显示颜色变化
+    float normalizedDensity = sqrt(density / u_maxDensity);
+    normalizedDensity = clamp(normalizedDensity, 0.0, 1.0);
+    
+    vec3 color = getDensityColor(normalizedDensity);
+    gl_FragColor = vec4(color, 0.7);
+  }
+`
+
+// 创建着色器
+const createShader = (gl, type, source) => {
+  const shader = gl.createShader(type)
+  gl.shaderSource(shader, source)
+  gl.compileShader(shader)
+  
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('Shader compilation error:', gl.getShaderInfoLog(shader))
+    gl.deleteShader(shader)
+    return null
+  }
+  
+  return shader
 }
 
-// 高斯核函数
-const gaussianKernel = (distance, sigma) => {
-  return Math.exp(-(distance * distance) / (2 * sigma * sigma))
+// 创建着色器程序
+const createProgram = (gl, vertexShader, fragmentShader) => {
+  const program = gl.createProgram()
+  gl.attachShader(program, vertexShader)
+  gl.attachShader(program, fragmentShader)
+  gl.linkProgram(program)
+  
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program linking error:', gl.getProgramInfoLog(program))
+    gl.deleteProgram(program)
+    return null
+  }
+  
+  return program
 }
 
-// 计算密度图
-const calculateDensityMap = () => {
-  if (!canvas.value || nodes.value.length === 0) return
+// 初始化WebGL
+const initWebGL = () => {
+  if (!glCanvas.value) return false
   
-  const width = canvas.value.width
-  const height = canvas.value.height
-  const step = resolution.value // 采样步长
-  
-  densityWidth.value = Math.ceil(width / step)
-  densityHeight.value = Math.ceil(height / step)
-  
-  const map = new Float32Array(densityWidth.value * densityHeight.value)
-  const sigma = kernelSize.value
-  
-  // 计算每个采样点的密度
-  for (let y = 0; y < densityHeight.value; y++) {
-    for (let x = 0; x < densityWidth.value; x++) {
-      const screenX = x * step
-      const screenY = y * step
-      let density = 0
-      
-      // 计算所有节点对该点的密度贡献
-      nodes.value.forEach(node => {
-        const dx = screenX - node.screenX
-        const dy = screenY - node.screenY
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        
-        // 使用节点权重（引用数）作为密度权重
-        const weight = Math.sqrt((node.weights?.Citations || 0) + (node.weights?.Documents || 1))
-        density += weight * gaussianKernel(distance, sigma)
-      })
-      
-      map[y * densityWidth.value + x] = density
-    }
+  const glContext = glCanvas.value.getContext('webgl') || glCanvas.value.getContext('experimental-webgl')
+  if (!glContext) {
+    console.error('WebGL not supported')
+    return false
   }
   
-  // 归一化密度值
-  let maxDensity = 0
-  for (let i = 0; i < map.length; i++) {
-    if (map[i] > maxDensity) maxDensity = map[i]
-  }
+  gl.value = glContext
   
-  if (maxDensity > 0) {
-    for (let i = 0; i < map.length; i++) {
-      map[i] /= maxDensity
-    }
-  }
+  // 创建着色器
+  const vertexShader = createShader(glContext, glContext.VERTEX_SHADER, vertexShaderSource)
+  const fragmentShader = createShader(glContext, glContext.FRAGMENT_SHADER, fragmentShaderSource)
   
-  densityMap.value = map
+  if (!vertexShader || !fragmentShader) return false
+  
+  // 创建程序
+  const program = createProgram(glContext, vertexShader, fragmentShader)
+  if (!program) return false
+  
+  shaderProgram.value = program
+  
+  // 创建全屏四边形
+  const positions = new Float32Array([
+    -1, -1,
+     1, -1,
+    -1,  1,
+     1,  1
+  ])
+  
+  const buffer = glContext.createBuffer()
+  glContext.bindBuffer(glContext.ARRAY_BUFFER, buffer)
+  glContext.bufferData(glContext.ARRAY_BUFFER, positions, glContext.STATIC_DRAW)
+  positionBuffer.value = buffer
+  
+  // 启用混合
+  glContext.enable(glContext.BLEND)
+  glContext.blendFunc(glContext.SRC_ALPHA, glContext.ONE_MINUS_SRC_ALPHA)
+  
+  return true
 }
 
 const initCanvas = () => {
-  if (!canvas.value || !canvasWrapper.value) return
+  if (!glCanvas.value || !overlayCanvas.value || !canvasWrapper.value) return
   
   const wrapper = canvasWrapper.value
-  canvas.value.width = wrapper.clientWidth
-  canvas.value.height = wrapper.clientHeight
-  ctx.value = canvas.value.getContext('2d')
+  const width = wrapper.clientWidth
+  const height = wrapper.clientHeight
+  
+  // 初始化WebGL canvas
+  glCanvas.value.width = width
+  glCanvas.value.height = height
+  
+  // 初始化overlay canvas
+  overlayCanvas.value.width = width
+  overlayCanvas.value.height = height
+  overlayCtx.value = overlayCanvas.value.getContext('2d')
+  
+  // 初始化WebGL
+  if (!gl.value) {
+    if (!initWebGL()) {
+      console.error('Failed to initialize WebGL')
+      return
+    }
+  }
   
   // 解析网络数据
   if (props.networkData?.network?.items) {
@@ -205,14 +253,14 @@ const initCanvas = () => {
     
     // 计算合适的缩放比例
     const padding = 100
-    const scaleX = (canvas.value.width - padding * 2) / dataWidth
-    const scaleY = (canvas.value.height - padding * 2) / dataHeight
+    const scaleX = (width - padding * 2) / dataWidth
+    const scaleY = (height - padding * 2) / dataHeight
     viewState.value.scale = Math.min(scaleX, scaleY, 800)
     viewState.value.baseScale = viewState.value.scale
     
     // 居中偏移
-    viewState.value.offsetX = canvas.value.width / 2
-    viewState.value.offsetY = canvas.value.height / 2
+    viewState.value.offsetX = width / 2
+    viewState.value.offsetY = height / 2
   }
   
   updateDensity()
@@ -242,51 +290,185 @@ const updateDensity = () => {
     node.screenY = screen.y
   })
   
-  // 重新计算密度图
-  calculateDensityMap()
+  // 计算最大密度（用于归一化）
+  calculateMaxDensity()
+  
+  // 渲染
   render()
 }
 
-const render = () => {
-  if (!ctx.value || !canvas.value) return
-  
-  const context = ctx.value
-  const width = canvas.value.width
-  const height = canvas.value.height
-  
-  // 清空画布
-  context.clearRect(0, 0, width, height)
-  
-  // 绘制密度热力图
-  if (densityMap.value) {
-    const imageData = context.createImageData(width, height)
-    const data = imageData.data
-    
-    const step = resolution.value
-    
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const mapX = Math.floor(x / step)
-        const mapY = Math.floor(y / step)
-        
-        if (mapX < densityWidth.value && mapY < densityHeight.value) {
-          const density = densityMap.value[mapY * densityWidth.value + mapX]
-          const color = getDensityColor(density)
-          
-          const idx = (y * width + x) * 4
-          data[idx] = color.r
-          data[idx + 1] = color.g
-          data[idx + 2] = color.b
-          data[idx + 3] = 255 * 0.7 // 透明度
-        }
-      }
-    }
-    
-    context.putImageData(imageData, 0, 0)
+// 计算最大密度值用于归一化
+const calculateMaxDensity = () => {
+  if (nodes.value.length === 0) {
+    maxDensity.value = 1.0
+    return
   }
   
-  // 绘制节点（小圆点）
-  nodes.value.forEach(node => {
+  let max = 0
+  const sigma = kernelSize.value
+  
+  // 在关键点采样以估算最大密度
+  for (let i = 0; i < nodes.value.length; i++) {
+    const node = nodes.value[i]
+    let density = 0
+    
+    for (let j = 0; j < nodes.value.length; j++) {
+      const other = nodes.value[j]
+      const dx = node.screenX - other.screenX
+      const dy = node.screenY - other.screenY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const weight = Math.sqrt((other.weights?.Citations || 0) + (other.weights?.Documents || 1))
+      density += weight * Math.exp(-(dist * dist) / (2 * sigma * sigma))
+    }
+    
+    if (density > max) max = density
+  }
+  
+  // 使用更保守的最大值，增强颜色对比度
+  maxDensity.value = max > 0 ? max * 0.6 : 1.0
+}
+
+// 使用WebGL渲染密度图
+const renderDensityMap = () => {
+  if (!gl.value || !shaderProgram.value || !glCanvas.value) return
+  
+  const glContext = gl.value
+  const program = shaderProgram.value
+  
+  glContext.viewport(0, 0, glCanvas.value.width, glCanvas.value.height)
+  glContext.clearColor(1, 1, 1, 1)
+  glContext.clear(glContext.COLOR_BUFFER_BIT)
+  
+  glContext.useProgram(program)
+  
+  // 设置顶点属性
+  const positionLocation = glContext.getAttribLocation(program, 'a_position')
+  glContext.bindBuffer(glContext.ARRAY_BUFFER, positionBuffer.value)
+  glContext.enableVertexAttribArray(positionLocation)
+  glContext.vertexAttribPointer(positionLocation, 2, glContext.FLOAT, false, 0, 0)
+  
+  // 设置uniforms
+  const resolutionLocation = glContext.getUniformLocation(program, 'u_resolution')
+  glContext.uniform2f(resolutionLocation, glCanvas.value.width, glCanvas.value.height)
+  
+  const sigmaLocation = glContext.getUniformLocation(program, 'u_sigma')
+  glContext.uniform1f(sigmaLocation, kernelSize.value)
+  
+  const maxDensityLocation = glContext.getUniformLocation(program, 'u_maxDensity')
+  glContext.uniform1f(maxDensityLocation, maxDensity.value)
+  
+  const nodeCountLocation = glContext.getUniformLocation(program, 'u_nodeCount')
+  glContext.uniform1i(nodeCountLocation, Math.min(nodes.value.length, 100))
+  
+  // 传递节点位置和权重
+  for (let i = 0; i < Math.min(nodes.value.length, 100); i++) {
+    const node = nodes.value[i]
+    const posLocation = glContext.getUniformLocation(program, `u_nodePositions[${i}]`)
+    glContext.uniform2f(posLocation, node.screenX, glCanvas.value.height - node.screenY)
+    
+    const weight = Math.sqrt((node.weights?.Citations || 0) + (node.weights?.Documents || 1))
+    const weightLocation = glContext.getUniformLocation(program, `u_nodeWeights[${i}]`)
+    glContext.uniform1f(weightLocation, weight)
+  }
+  
+  // 绘制
+  glContext.drawArrays(glContext.TRIANGLE_STRIP, 0, 4)
+}
+
+const render = () => {
+  // 渲染WebGL密度图
+  renderDensityMap()
+  
+  // 渲染overlay（节点和标签）
+  if (!overlayCtx.value || !overlayCanvas.value) return
+  
+  const context = overlayCtx.value
+  const width = overlayCanvas.value.width
+  const height = overlayCanvas.value.height
+  
+  // 清空overlay
+  context.clearRect(0, 0, width, height)
+  
+  // 确定哪些节点应该显示（基于权重和碰撞检测）
+  const nodesToDisplay = new Set()
+  
+  if (showLabels.value) {
+    // 按权重排序节点（权重大的优先显示）
+    const sortedNodes = [...nodes.value].sort((a, b) => {
+      const weightA = (a.weights?.Citations || 0) + (a.weights?.Documents || 0)
+      const weightB = (b.weights?.Citations || 0) + (b.weights?.Documents || 0)
+      return weightB - weightA
+    })
+    
+    // 根据缩放级别调整标签密度
+    const scale = viewState.value.scale
+    const baseScale = viewState.value.baseScale
+    const zoomRatio = scale / baseScale
+    
+    // 缩放越小，显示的标签越少（只显示重要的）
+    let maxLabels
+    if (zoomRatio < 0.5) {
+      maxLabels = Math.ceil(nodes.value.length * 0.1) // 10%
+    } else if (zoomRatio < 0.8) {
+      maxLabels = Math.ceil(nodes.value.length * 0.3) // 30%
+    } else if (zoomRatio < 1.2) {
+      maxLabels = Math.ceil(nodes.value.length * 0.6) // 60%
+    } else {
+      maxLabels = nodes.value.length // 全部显示
+    }
+    
+    // 记录已绘制标签的边界框，用于碰撞检测
+    const drawnLabelBoxes = []
+    const minLabelSpacing = 15 // 标签最小间距
+    
+    // 临时设置字体用于测量文本宽度
+    context.font = '11px Arial, sans-serif'
+    
+    let labelCount = 0
+    for (const node of sortedNodes) {
+      if (labelCount >= maxLabels) break
+      
+      const label = node.label || ''
+      if (!label) continue
+      
+      // 计算标签边界框
+      const labelWidth = context.measureText(label).width
+      const labelHeight = 11 // 字体大小
+      const labelBox = {
+        x: node.screenX - labelWidth / 2,
+        y: node.screenY - 8 - labelHeight / 2,
+        width: labelWidth,
+        height: labelHeight
+      }
+      
+      // 检查是否与已绘制的标签重叠
+      let overlaps = false
+      for (const existingBox of drawnLabelBoxes) {
+        if (
+          labelBox.x < existingBox.x + existingBox.width + minLabelSpacing &&
+          labelBox.x + labelBox.width + minLabelSpacing > existingBox.x &&
+          labelBox.y < existingBox.y + existingBox.height + minLabelSpacing &&
+          labelBox.y + labelBox.height + minLabelSpacing > existingBox.y
+        ) {
+          overlaps = true
+          break
+        }
+      }
+      
+      // 如果不重叠，标记此节点应该显示
+      if (!overlaps) {
+        nodesToDisplay.add(node)
+        drawnLabelBoxes.push(labelBox)
+        labelCount++
+      }
+    }
+  } else {
+    // 如果标签不显示，则显示所有节点
+    nodes.value.forEach(node => nodesToDisplay.add(node))
+  }
+  
+  // 绘制筛选后的节点（小圆点）
+  nodesToDisplay.forEach(node => {
     const size = 3
     context.fillStyle = 'rgba(255, 255, 255, 0.8)'
     context.strokeStyle = 'rgba(50, 50, 50, 0.6)'
@@ -298,20 +480,33 @@ const render = () => {
     context.stroke()
   })
   
-  // 绘制标签
+  // 绘制标签（字体大小根据权重调整）
   if (showLabels.value) {
     context.textAlign = 'center'
     context.textBaseline = 'middle'
-    context.font = '11px Arial, sans-serif'
-    context.fillStyle = 'rgba(0, 0, 0, 0.8)'
-    context.strokeStyle = 'rgba(255, 255, 255, 0.8)'
-    context.lineWidth = 3
+    context.fillStyle = 'rgba(0, 0, 0, 0.9)'
     
-    nodes.value.forEach(node => {
+    // 计算权重范围用于归一化字体大小
+    let minWeight = Infinity
+    let maxWeight = -Infinity
+    nodesToDisplay.forEach(node => {
+      const weight = (node.weights?.Citations || 0) + (node.weights?.Documents || 0)
+      if (weight < minWeight) minWeight = weight
+      if (weight > maxWeight) maxWeight = weight
+    })
+    const weightRange = maxWeight - minWeight || 1
+    
+    nodesToDisplay.forEach(node => {
       const label = node.label || ''
-      // 先描边再填充，形成描边效果
-      context.strokeText(label, node.screenX, node.screenY - 8)
-      context.fillText(label, node.screenX, node.screenY - 8)
+      if (label) {
+        // 根据权重计算字体大小 (9px - 16px)
+        const weight = (node.weights?.Citations || 0) + (node.weights?.Documents || 0)
+        const normalizedWeight = (weight - minWeight) / weightRange
+        const fontSize = Math.round(9 + normalizedWeight * 7) // 9px到16px
+        
+        context.font = `${fontSize}px Arial, sans-serif`
+        context.fillText(label, node.screenX, node.screenY - 8)
+      }
     })
   }
   
@@ -345,7 +540,7 @@ const getNodeAtPosition = (x, y) => {
 }
 
 const onMouseDown = (e) => {
-  const rect = canvas.value.getBoundingClientRect()
+  const rect = overlayCanvas.value.getBoundingClientRect()
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
   
@@ -363,7 +558,7 @@ const onMouseDown = (e) => {
 }
 
 const onMouseMove = (e) => {
-  const rect = canvas.value.getBoundingClientRect()
+  const rect = overlayCanvas.value.getBoundingClientRect()
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
   
@@ -379,11 +574,11 @@ const onMouseMove = (e) => {
     const node = getNodeAtPosition(x, y)
     if (node !== hoveredNode.value) {
       hoveredNode.value = node
-      canvas.value.style.cursor = node ? 'pointer' : 'move'
+      overlayCanvas.value.style.cursor = node ? 'pointer' : 'move'
       
       if (node) {
-        hoverInfoX.value = canvas.value.width - 220
-        hoverInfoY.value = canvas.value.height - 120
+        hoverInfoX.value = overlayCanvas.value.width - 220
+        hoverInfoY.value = overlayCanvas.value.height - 120
       }
       
       render()
@@ -398,7 +593,7 @@ const onMouseUp = () => {
 const onWheel = (e) => {
   e.preventDefault()
   
-  const rect = canvas.value.getBoundingClientRect()
+  const rect = overlayCanvas.value.getBoundingClientRect()
   const mouseX = e.clientX - rect.left
   const mouseY = e.clientY - rect.top
   
@@ -417,7 +612,7 @@ const onWheel = (e) => {
 }
 
 const resetView = () => {
-  if (nodes.value.length > 0) {
+  if (nodes.value.length > 0 && glCanvas.value) {
     const xCoords = nodes.value.map(n => n.x)
     const yCoords = nodes.value.map(n => n.y)
     const minX = Math.min(...xCoords)
@@ -429,22 +624,28 @@ const resetView = () => {
     const dataHeight = maxY - minY
     
     const padding = 100
-    const scaleX = (canvas.value.width - padding * 2) / dataWidth
-    const scaleY = (canvas.value.height - padding * 2) / dataHeight
+    const scaleX = (glCanvas.value.width - padding * 2) / dataWidth
+    const scaleY = (glCanvas.value.height - padding * 2) / dataHeight
     viewState.value.scale = Math.min(scaleX, scaleY, 800)
     viewState.value.baseScale = viewState.value.scale
     
-    viewState.value.offsetX = canvas.value.width / 2
-    viewState.value.offsetY = canvas.value.height / 2
+    viewState.value.offsetX = glCanvas.value.width / 2
+    viewState.value.offsetY = glCanvas.value.height / 2
   }
   
   updateDensity()
 }
 
 const handleResize = () => {
-  if (canvas.value && canvasWrapper.value) {
-    canvas.value.width = canvasWrapper.value.clientWidth
-    canvas.value.height = canvasWrapper.value.clientHeight
+  if (glCanvas.value && overlayCanvas.value && canvasWrapper.value) {
+    const width = canvasWrapper.value.clientWidth
+    const height = canvasWrapper.value.clientHeight
+    
+    glCanvas.value.width = width
+    glCanvas.value.height = height
+    overlayCanvas.value.width = width
+    overlayCanvas.value.height = height
+    
     updateDensity()
   }
 }
@@ -477,63 +678,6 @@ watch(() => props.networkData, () => {
   position: relative;
 }
 
-.density-controls {
-  display: flex;
-  gap: 20px;
-  padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom: 1px solid #e0e0e0;
-  align-items: center;
-  flex-wrap: wrap;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #333;
-}
-
-.control-group label {
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.control-group input[type="range"] {
-  width: 120px;
-}
-
-.control-group select {
-  padding: 4px 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background: white;
-  font-size: 13px;
-}
-
-.control-group input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.reset-btn {
-  padding: 6px 16px;
-  background: #3498db;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.reset-btn:hover {
-  background: #2980b9;
-}
 
 .canvas-wrapper {
   flex: 1;
@@ -541,10 +685,23 @@ watch(() => props.networkData, () => {
   overflow: hidden;
 }
 
-.canvas-wrapper canvas {
-  display: block;
-  cursor: move;
+.gl-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: white;
+}
+
+.overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: move;
+  pointer-events: all;
 }
 
 .hover-info {
@@ -576,46 +733,5 @@ watch(() => props.networkData, () => {
 .info-row strong {
   color: #333;
   font-weight: 600;
-}
-
-.color-legend {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(8px);
-  min-width: 150px;
-}
-
-.legend-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 8px;
-  text-align: center;
-}
-
-.legend-gradient {
-  height: 20px;
-  background: linear-gradient(to right, 
-    rgb(0, 0, 255),      /* 蓝色 */
-    rgb(0, 255, 255),    /* 青色 */
-    rgb(0, 255, 0),      /* 绿色 */
-    rgb(255, 255, 0),    /* 黄色 */
-    rgb(255, 0, 0)       /* 红色 */
-  );
-  border-radius: 3px;
-  margin-bottom: 6px;
-}
-
-.legend-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #666;
 }
 </style>

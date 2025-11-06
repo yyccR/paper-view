@@ -157,6 +157,7 @@ export default {
       'treemap_drip_down': 'Treemap',
       'wordcloud': 'Word Cloud',
       'citation_network': 'Citation Network',
+      'density-network': 'Density Network',
       // Template descriptions
       descriptions: {
         '3d_bar': '3D visualization for paper data multi-dimensional analysis',
@@ -193,7 +194,8 @@ export default {
         'tree_radial': 'Research taxonomy radial tree structure',
         'treemap_drip_down': 'Hierarchical data proportion treemap visualization',
         'wordcloud': 'Paper keyword frequency word cloud analysis',
-        'citation_network': 'Academic literature citation relationship network visualization'
+        'citation_network': 'Academic literature citation relationship network visualization',
+        'density-network': 'Literature distribution density heatmap network visualization'
       }
     },
     
