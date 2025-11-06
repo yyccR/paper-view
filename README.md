@@ -1,7 +1,7 @@
 # Paper View
 
 <p align="center">
-      <img src="./assets/readme_images/index.png" alt="Paper View" width="800"/>
+      <img src="./assets/readme_images/index2.png" alt="Paper View" width="800"/>
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ## 🌟 Introduction
 
-Paper View is a cutting-edge **Paper Visual Reading System** designed for researchers, students, and AI enthusiasts. Built with modern web technologies, Paper View transforms the way you interact with academic papers by combining powerful search capabilities, intuitive PDF viewing, and rich data visualization tools. Whether you're exploring arXiv's vast repository of 2.8+ million papers or analyzing your own research documents, Paper View provides an elegant and efficient workflow.
+Paper View is a cutting-edge **Paper View** designed for researchers, students, and AI enthusiasts. Built with modern web technologies, Paper View transforms the way you interact with academic papers by combining powerful search capabilities, intuitive PDF viewing, and rich data visualization tools. Whether you're exploring arXiv's vast repository of 2.8+ million papers or analyzing your own research documents, Paper View provides an elegant and efficient workflow.
 
 ## ✨ Key Features
 

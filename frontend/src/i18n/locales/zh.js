@@ -23,7 +23,7 @@ export default {
   },
   
   hero: {
-    title: 'Paper Visual Reading System',
+    title: 'Paper View',
     searchPlaceholder: '输入pdf链接或者直接搜索论文',
     uploadTitle: '上传PDF',
     processing: '处理中...'

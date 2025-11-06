@@ -23,7 +23,7 @@ export default {
   },
   
   hero: {
-    title: 'Paper Visual Reading System',
+    title: 'Paper View',
     searchPlaceholder: 'Enter PDF link or search papers',
     uploadTitle: 'Upload PDF',
     processing: 'Processing...'
@@ -36,7 +36,7 @@ export default {
       description: 'Support full arXiv taxonomy\nCovering 2.8M+ paper resources'
     },
     visualization: {
-      title: 'Paper Visualization',
+      title: 'Paper View',
       description: 'Provide 50+ chart visualizations\nMulti-dimensional data display'
     },
     realtime: {
