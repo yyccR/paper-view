@@ -28,6 +28,10 @@
         v-if="densityData && densityData.network"
         :networkData="densityData"
       />
+      <ResearchClusterVisualization
+        v-if="clusterData && clusterData.network"
+        :networkData="clusterData"
+      />
     </div>
   </div>
 </template>
@@ -36,13 +40,15 @@ import ConnectedPapersGraph from '@/components/ConnectedPapersGraph.vue'
 import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
 import CitationNetwork from '@/components/CitationNetwork.vue'
 import DensityVisualization from '@/components/DensityVisualization.vue'
+import ResearchClusterVisualization from '@/components/ResearchClusterVisualization.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
   visualizationData: { type: Object, default: null },
   wordCloudData: { type: Array, default: () => [] },
   vosviewerData: { type: Object, default: null },
-  densityData: { type: Object, default: null }
+  densityData: { type: Object, default: null },
+  clusterData: { type: Object, default: null }
 })
 const emit = defineEmits(['back-to-pdf'])
 </script>

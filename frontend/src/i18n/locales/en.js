@@ -158,6 +158,7 @@ export default {
       'wordcloud': 'Word Cloud',
       'citation_network': 'Citation Network',
       'density-network': 'Density Network',
+      'research_cluster': 'Research Cluster',
       // Template descriptions
       descriptions: {
         '3d_bar': '3D visualization for paper data multi-dimensional analysis',
@@ -195,7 +196,8 @@ export default {
         'treemap_drip_down': 'Hierarchical data proportion treemap visualization',
         'wordcloud': 'Paper keyword frequency word cloud analysis',
         'citation_network': 'Academic literature citation relationship network visualization',
-        'density-network': 'Literature distribution density heatmap network visualization'
+        'density-network': 'Literature distribution density heatmap network visualization',
+        'research_cluster': 'CiteSpace cluster analysis for research hotspots visualization'
       }
     },
     

@@ -6,7 +6,7 @@
 .welcome-view h2 { font-size: 28px; color: #2c3e50; margin-bottom: 15px; }
 .welcome-view p { font-size: 16px; }
 
-.search-results { max-width: 1000px; }
+.search-results { max-width: 100%; width: 100%; }
 .results-title { font-size: 24px; color: #2c3e50; margin-bottom: 20px; }
 .results-list { display: flex; flex-direction: column; gap: 15px; }
 .result-item { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); transition: all 0.3s ease; cursor: pointer; }

@@ -149,6 +149,7 @@
         :wordCloudData="wordCloudData"
         :vosviewerData="vosviewerData"
         :densityData="densityData"
+        :clusterData="clusterData"
         @back-to-pdf="backToPdfPreview"
       />
 
@@ -541,6 +542,7 @@ const visualizationData = ref(null)
 const wordCloudData = ref([])
 const vosviewerData = ref(null)
 const densityData = ref(null)
+const clusterData = ref(null)
 const pdfExpanded = ref(false)
 const currentPdfUrl = ref('')
 // 跟踪已加载的可视化模板
@@ -757,6 +759,7 @@ const selectPaper = async (paper) => {
   wordCloudData.value = []
   vosviewerData.value = null
   densityData.value = null
+  clusterData.value = null
   loadedVisualizations.value = []
   pdfBlobUrl.value = ''
   isDownloading.value = true
@@ -833,6 +836,7 @@ const closePdfPreview = () => {
   visualizationData.value = null
   vosviewerData.value = null
   densityData.value = null
+  clusterData.value = null
   pdfExpanded.value = false
   // 清空已加载的可视化记录
   loadedVisualizations.value = []
@@ -882,6 +886,7 @@ const applyVisualization = async () => {
         visualizationData.value = null
         vosviewerData.value = null
         densityData.value = null
+        clusterData.value = null
         
         // 记录已加载的可视化
         const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -925,6 +930,7 @@ const applyVisualization = async () => {
       wordCloudData.value = []
       vosviewerData.value = null
       densityData.value = null
+      clusterData.value = null
       console.log('可视化数据:', visualizationData.value)
       console.log('节点数量:', visualizationData.value.nodes.length)
       console.log('边数量:', visualizationData.value.edges.length)
@@ -970,6 +976,7 @@ const applyVisualization = async () => {
       visualizationData.value = null
       wordCloudData.value = []
       densityData.value = null
+      clusterData.value = null
       
       // 记录已加载的可视化
       const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -1010,6 +1017,7 @@ const applyVisualization = async () => {
       visualizationData.value = null
       wordCloudData.value = []
       vosviewerData.value = null
+      clusterData.value = null
       
       // 记录已加载的可视化
       const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -1030,6 +1038,47 @@ const applyVisualization = async () => {
       
     } catch (error) {
       console.error('加载密度可视化数据失败:', error)
+      alert(t('workspace.visualization.loadFailed'))
+    } finally {
+      isProcessing.value = false
+    }
+  } else if (templateKey === 'research_cluster') {
+    isProcessing.value = true
+    
+    try {
+      // 加载 VOSviewer 网络数据用于研究聚类可视化
+      const response = await fetch('/assets/bib/VOSviewer-network.json')
+      const networkData = await response.json()
+      
+      console.log('加载研究聚类可视化数据成功')
+      console.log('节点数量:', networkData.network?.items?.length || 0)
+      
+      // 设置聚类数据
+      clusterData.value = networkData
+      visualizationData.value = null
+      wordCloudData.value = []
+      vosviewerData.value = null
+      densityData.value = null
+      
+      // 记录已加载的可视化
+      const vizId = `${selectedTemplate.value}-${Date.now()}`
+      if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+        loadedVisualizations.value.push({
+          id: vizId,
+          templateIndex: selectedTemplate.value,
+          templateName: templateName,
+          data: clusterData.value
+        })
+      }
+      
+      // 显示可视化
+      showVisualization.value = true
+      pdfExpanded.value = false
+      
+      await nextTick()
+      
+    } catch (error) {
+      console.error('加载研究聚类可视化数据失败:', error)
       alert(t('workspace.visualization.loadFailed'))
     } finally {
       isProcessing.value = false
@@ -1097,9 +1146,10 @@ const returnToVisualization = (vizId) => {
         visualizationData.value = null
         vosviewerData.value = null
         densityData.value = null
+        clusterData.value = null
       } else if (viz.data.network && viz.data.network.items) {
-        // 检查是否为密度可视化或VOSviewer网络数据
-        // 根据templateName区分（density-network对应密度可视化）
+        // 检查是否为密度可视化、研究聚类或VOSviewer网络数据
+        // 根据templateName区分
         const imageName = thumbnails.value[viz.templateIndex]
         const templateKey = imageName?.replace('.png', '')
         
@@ -1109,12 +1159,21 @@ const returnToVisualization = (vizId) => {
           visualizationData.value = null
           wordCloudData.value = []
           vosviewerData.value = null
+          clusterData.value = null
+        } else if (templateKey === 'research_cluster') {
+          // 研究聚类数据
+          clusterData.value = viz.data
+          visualizationData.value = null
+          wordCloudData.value = []
+          vosviewerData.value = null
+          densityData.value = null
         } else {
           // VOSviewer 网络数据
           vosviewerData.value = viz.data
           visualizationData.value = null
           wordCloudData.value = []
           densityData.value = null
+          clusterData.value = null
         }
       } else {
         // 关系图数据
@@ -1122,6 +1181,7 @@ const returnToVisualization = (vizId) => {
         wordCloudData.value = []
         vosviewerData.value = null
         densityData.value = null
+        clusterData.value = null
       }
     }
   }

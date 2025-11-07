@@ -158,6 +158,7 @@ export default {
       'wordcloud': '词云图',
       'citation_network': '文献引用网络',
       'density-network': '密度网络图',
+      'research_cluster': '研究聚类图',
       // 模板描述
       descriptions: {
         '3d_bar': '立体展示论文数据多维度对比分析',
@@ -194,7 +195,8 @@ export default {
         'treemap_drip_down': '层次数据占比矩形树图可视化',
         'wordcloud': '论文关键词与主题词云图可视化',
         'citation_network': '学术文献引用关系网络结构图',
-        'density-network': '文献分布密度热力网络可视化'
+        'density-network': '文献分布密度热力网络可视化',
+        'research_cluster': 'CiteSpace聚类图谱研究热点分析'
       }
     },
     
