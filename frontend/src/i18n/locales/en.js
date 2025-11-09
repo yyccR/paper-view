@@ -197,7 +197,7 @@ export default {
         'wordcloud': 'Paper keyword frequency word cloud analysis',
         'citation_network': 'Academic literature citation relationship network visualization',
         'density-network': 'Literature distribution density heatmap network visualization',
-        'research_cluster': 'CiteSpace cluster analysis for research hotspots visualization'
+        'research_cluster': 'cluster analysis for research hotspots visualization'
       }
     },
     

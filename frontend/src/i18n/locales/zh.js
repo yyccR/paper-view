@@ -196,7 +196,7 @@ export default {
         'wordcloud': '论文关键词与主题词云图可视化',
         'citation_network': '学术文献引用关系网络结构图',
         'density-network': '文献分布密度热力网络可视化',
-        'research_cluster': 'CiteSpace聚类图谱研究热点分析'
+        'research_cluster': '聚类图谱研究热点分析'
       }
     },
     
