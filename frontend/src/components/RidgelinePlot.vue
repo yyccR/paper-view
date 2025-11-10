@@ -10,7 +10,7 @@
         </svg>
       </button>
       <!-- 悬浮信息提示 -->
-      <div v-if="hoveredArea" class="tooltip" :style="tooltipStyle">
+      <div v-if="hoveredArea" ref="tooltipRef" class="tooltip" :style="tooltipStyle">
         <div class="tooltip-title">{{ hoveredArea.field }}</div>
         <div class="tooltip-content">
           <div class="tooltip-row">
@@ -51,6 +51,7 @@ const props = defineProps({
 
 const containerRef = ref(null)
 const svgRef = ref(null)
+const tooltipRef = ref(null)
 const hoveredArea = ref(null)
 const tooltipStyle = ref({})
 
@@ -305,7 +306,7 @@ const initVisualization = () => {
       .attr('fill', baseColor)
       .attr('fill-opacity', 0.55)  // 统一的半透明度
       .attr('stroke', baseColor.darker(0.8))  // 更深的边框颜色
-      .attr('stroke-width', 2.5)
+      .attr('stroke-width', 1)
 
     // 添加交互
     fieldData.values.forEach((value, valueIndex) => {
@@ -332,11 +333,14 @@ const initVisualization = () => {
           }
           updateTooltipPosition(event)
           
+          // 将当前领域分组置于顶层，保证视觉上方
+          fieldGroup.raise()
+
           // 只增强整条曲线的显示，不高亮交互区域本身
           path.transition()
             .duration(200)
-            .attr('stroke-width', 3.5)
-            .attr('fill-opacity', 0.75)
+            .attr('stroke-width', 2)
+            .attr('fill-opacity', 1)
         })
         .on('mousemove', (event) => {
           updateTooltipPosition(event)
@@ -347,7 +351,7 @@ const initVisualization = () => {
           // 恢复曲线的原始样式
           path.transition()
             .duration(200)
-            .attr('stroke-width', 2.5)
+            .attr('stroke-width', 1)
             .attr('fill-opacity', 0.55)
         })
     })
@@ -362,15 +366,6 @@ const initVisualization = () => {
       .attr('font-weight', '600')
       .attr('fill', '#2c3e50')
       .text(fieldData.field)
-
-    // 绘制基线
-    fieldGroup.append('line')
-      .attr('x1', 0)
-      .attr('x2', plotWidth)
-      .attr('y1', 0)
-      .attr('y2', 0)
-      .attr('stroke', '#ddd')
-      .attr('stroke-width', 1)
   })
 
   // 添加X轴
@@ -411,60 +406,88 @@ const updateTooltipPosition = (event) => {
   const mouseX = event.clientX - rect.left
   const mouseY = event.clientY - rect.top
   
-  // 预估 tooltip 宽度和高度
-  const tooltipWidth = 220
-  const tooltipHeight = 130
-  const verticalOffset = 20 // 垂直方向的偏移量（远离鼠标水平线）
-  const horizontalOffset = 80 // 水平方向的偏移量（避开鼠标点）
+  // 动态获取tooltip的真实尺寸（如果已渲染）
+  let tooltipWidth = 250
+  let tooltipHeight = 150
   
-  let left, top
+  if (tooltipRef.value) {
+    const tooltipRect = tooltipRef.value.getBoundingClientRect()
+    tooltipWidth = tooltipRect.width || 250
+    tooltipHeight = tooltipRect.height || 150
+  }
   
-  // 计算鼠标在容器中的相对位置（0-1）
-  const relativeX = mouseX / rect.width
-  const relativeY = mouseY / rect.height
+  // 针对Ridgeline图的横向曲线特性，显著增大垂直间距
+  // 确保浮窗跨越到其他曲线区域，不遮挡当前曲线
+  const verticalGap = 50   // 垂直间距显著增大
+  const horizontalGap = 40 // 水平间距增大
+  const edgeMargin = 15    // 边缘距离
+
+  // 计算四个方向的可用空间
+  const spaceAbove = mouseY - edgeMargin
+  const spaceBelow = rect.height - mouseY - edgeMargin
+  const spaceLeft = mouseX - edgeMargin
+  const spaceRight = rect.width - mouseX - edgeMargin
+
+  const canPlaceAbove = spaceAbove >= tooltipHeight + verticalGap
+  const canPlaceBelow = spaceBelow >= tooltipHeight + verticalGap
+  const canPlaceLeft = spaceLeft >= tooltipWidth + horizontalGap
+  const canPlaceRight = spaceRight >= tooltipWidth + horizontalGap
+
+  // 选择最佳象限：优先上方+右侧，避免覆盖曲线
+  let placeAbove = canPlaceAbove
+  let placeRight = canPlaceRight
   
-  // Ridgeline Plot 的关键是不要遮挡横向的曲线
-  // 策略：浮窗始终显示在鼠标的上方或下方，同时水平方向偏移避开鼠标点
+  // 如果上方放不下，尝试下方
+  if (!canPlaceAbove && canPlaceBelow) {
+    placeAbove = false
+  } else if (!canPlaceAbove && !canPlaceBelow) {
+    // 两边都不够，选择空间大的
+    placeAbove = spaceAbove > spaceBelow
+  }
   
-  // 垂直方向：根据鼠标位置决定上下
-  if (relativeY > 0.5) {
-    // 鼠标在下半部分 -> 浮窗显示在上方（远离鼠标水平线）
-    top = `${mouseY - tooltipHeight - verticalOffset}px`
+  // 如果右侧放不下，尝试左侧
+  if (!canPlaceRight && canPlaceLeft) {
+    placeRight = false
+  } else if (!canPlaceRight && !canPlaceLeft) {
+    // 两边都不够，选择空间大的
+    placeRight = spaceRight > spaceLeft
+  }
+
+  // 计算位置：确保浮窗完全在鼠标点外侧（四边都不跨越鼠标点）
+  let top, left
+  
+  if (placeAbove) {
+    // 浮窗在上方：下边界必须在鼠标上方
+    top = mouseY - verticalGap - tooltipHeight
   } else {
-    // 鼠标在上半部分 -> 浮窗显示在下方（远离鼠标水平线）
-    top = `${mouseY + verticalOffset}px`
+    // 浮窗在下方：上边界必须在鼠标下方
+    top = mouseY + verticalGap
   }
-  
-  // 水平方向：向左或向右偏移，避开鼠标点
-  if (relativeX > 0.5) {
-    // 鼠标在右侧 -> 浮窗向左偏移
-    left = `${mouseX - tooltipWidth - horizontalOffset}px`
+
+  if (placeRight) {
+    // 浮窗在右侧：左边界必须在鼠标右方
+    left = mouseX + horizontalGap
   } else {
-    // 鼠标在左侧 -> 浮窗向右偏移
-    left = `${mouseX + horizontalOffset}px`
+    // 浮窗在左侧：右边界必须在鼠标左方
+    left = mouseX - horizontalGap - tooltipWidth
   }
-  
-  // 边界检查，确保浮窗不超出容器范围
-  let leftNum = parseFloat(left)
-  let topNum = parseFloat(top)
-  
-  // 水平边界检查
-  if (leftNum < 10) {
-    leftNum = 10
-  } else if (leftNum + tooltipWidth > rect.width - 10) {
-    leftNum = rect.width - tooltipWidth - 10
+
+  // 边界夹紧：确保不超出容器（但尽量保持不跨越鼠标点）
+  if (top < edgeMargin) {
+    top = edgeMargin
+  } else if (top + tooltipHeight > rect.height - edgeMargin) {
+    top = Math.max(edgeMargin, rect.height - tooltipHeight - edgeMargin)
   }
-  
-  // 垂直边界检查
-  if (topNum < 10) {
-    topNum = 10
-  } else if (topNum + tooltipHeight > rect.height - 10) {
-    topNum = rect.height - tooltipHeight - 10
+
+  if (left < edgeMargin) {
+    left = edgeMargin
+  } else if (left + tooltipWidth > rect.width - edgeMargin) {
+    left = Math.max(edgeMargin, rect.width - tooltipWidth - edgeMargin)
   }
-  
+
   tooltipStyle.value = { 
-    left: `${leftNum}px`, 
-    top: `${topNum}px` 
+    left: `${left}px`, 
+    top: `${top}px` 
   }
 }
 
@@ -608,7 +631,10 @@ watch(() => props.ridgelineData, () => {
   border-radius: 4px;
 }
 
-:deep(.x-axis path),
+:deep(.x-axis path.domain) {
+  stroke: none;
+}
+
 :deep(.x-axis line) {
   stroke: #999;
 }
