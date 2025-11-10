@@ -150,6 +150,7 @@
         :vosviewerData="vosviewerData"
         :densityData="densityData"
         :clusterData="clusterData"
+        :ridgelineData="ridgelineData"
         @back-to-pdf="backToPdfPreview"
       />
 
@@ -543,6 +544,7 @@ const wordCloudData = ref([])
 const vosviewerData = ref(null)
 const densityData = ref(null)
 const clusterData = ref(null)
+const ridgelineData = ref(null)
 const pdfExpanded = ref(false)
 const currentPdfUrl = ref('')
 // 跟踪已加载的可视化模板
@@ -760,6 +762,7 @@ const selectPaper = async (paper) => {
   vosviewerData.value = null
   densityData.value = null
   clusterData.value = null
+  ridgelineData.value = null
   loadedVisualizations.value = []
   pdfBlobUrl.value = ''
   isDownloading.value = true
@@ -837,6 +840,7 @@ const closePdfPreview = () => {
   vosviewerData.value = null
   densityData.value = null
   clusterData.value = null
+  ridgelineData.value = null
   pdfExpanded.value = false
   // 清空已加载的可视化记录
   loadedVisualizations.value = []
@@ -887,6 +891,7 @@ const applyVisualization = async () => {
         vosviewerData.value = null
         densityData.value = null
         clusterData.value = null
+        ridgelineData.value = null
         
         // 记录已加载的可视化
         const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -931,6 +936,7 @@ const applyVisualization = async () => {
       vosviewerData.value = null
       densityData.value = null
       clusterData.value = null
+      ridgelineData.value = null
       console.log('可视化数据:', visualizationData.value)
       console.log('节点数量:', visualizationData.value.nodes.length)
       console.log('边数量:', visualizationData.value.edges.length)
@@ -977,6 +983,7 @@ const applyVisualization = async () => {
       wordCloudData.value = []
       densityData.value = null
       clusterData.value = null
+      ridgelineData.value = null
       
       // 记录已加载的可视化
       const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -1018,6 +1025,7 @@ const applyVisualization = async () => {
       wordCloudData.value = []
       vosviewerData.value = null
       clusterData.value = null
+      ridgelineData.value = null
       
       // 记录已加载的可视化
       const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -1059,6 +1067,7 @@ const applyVisualization = async () => {
       wordCloudData.value = []
       vosviewerData.value = null
       densityData.value = null
+      ridgelineData.value = null
       
       // 记录已加载的可视化
       const vizId = `${selectedTemplate.value}-${Date.now()}`
@@ -1079,6 +1088,48 @@ const applyVisualization = async () => {
       
     } catch (error) {
       console.error('加载研究聚类可视化数据失败:', error)
+      alert(t('workspace.visualization.loadFailed'))
+    } finally {
+      isProcessing.value = false
+    }
+  } else if (templateKey === 'basic_ridgeline_plot') {
+    isProcessing.value = true
+    
+    try {
+      // 加载 VOSviewer 网络数据用于 Ridgeline Plot 可视化
+      const response = await fetch('/assets/bib/VOSviewer-network.json')
+      const networkData = await response.json()
+      
+      console.log('加载 Ridgeline Plot 数据成功')
+      console.log('节点数量:', networkData.network?.items?.length || 0)
+      
+      // 设置 ridgeline 数据
+      ridgelineData.value = networkData
+      visualizationData.value = null
+      wordCloudData.value = []
+      vosviewerData.value = null
+      densityData.value = null
+      clusterData.value = null
+      
+      // 记录已加载的可视化
+      const vizId = `${selectedTemplate.value}-${Date.now()}`
+      if (!loadedVisualizations.value.find(v => v.templateIndex === selectedTemplate.value)) {
+        loadedVisualizations.value.push({
+          id: vizId,
+          templateIndex: selectedTemplate.value,
+          templateName: templateName,
+          data: ridgelineData.value
+        })
+      }
+      
+      // 显示可视化
+      showVisualization.value = true
+      pdfExpanded.value = false
+      
+      await nextTick()
+      
+    } catch (error) {
+      console.error('加载 Ridgeline Plot 数据失败:', error)
       alert(t('workspace.visualization.loadFailed'))
     } finally {
       isProcessing.value = false
@@ -1147,8 +1198,9 @@ const returnToVisualization = (vizId) => {
         vosviewerData.value = null
         densityData.value = null
         clusterData.value = null
+        ridgelineData.value = null
       } else if (viz.data.network && viz.data.network.items) {
-        // 检查是否为密度可视化、研究聚类或VOSviewer网络数据
+        // 检查是否为密度可视化、研究聚类、Ridgeline Plot 或 VOSviewer网络数据
         // 根据templateName区分
         const imageName = thumbnails.value[viz.templateIndex]
         const templateKey = imageName?.replace('.png', '')
@@ -1160,6 +1212,7 @@ const returnToVisualization = (vizId) => {
           wordCloudData.value = []
           vosviewerData.value = null
           clusterData.value = null
+          ridgelineData.value = null
         } else if (templateKey === 'research_cluster') {
           // 研究聚类数据
           clusterData.value = viz.data
@@ -1167,6 +1220,15 @@ const returnToVisualization = (vizId) => {
           wordCloudData.value = []
           vosviewerData.value = null
           densityData.value = null
+          ridgelineData.value = null
+        } else if (templateKey === 'basic_ridgeline_plot') {
+          // Ridgeline Plot 数据
+          ridgelineData.value = viz.data
+          visualizationData.value = null
+          wordCloudData.value = []
+          vosviewerData.value = null
+          densityData.value = null
+          clusterData.value = null
         } else {
           // VOSviewer 网络数据
           vosviewerData.value = viz.data
@@ -1174,6 +1236,7 @@ const returnToVisualization = (vizId) => {
           wordCloudData.value = []
           densityData.value = null
           clusterData.value = null
+          ridgelineData.value = null
         }
       } else {
         // 关系图数据
@@ -1182,6 +1245,7 @@ const returnToVisualization = (vizId) => {
         vosviewerData.value = null
         densityData.value = null
         clusterData.value = null
+        ridgelineData.value = null
       }
     }
   }

@@ -32,6 +32,10 @@
         v-if="clusterData && clusterData.network"
         :networkData="clusterData"
       />
+      <RidgelinePlot
+        v-if="ridgelineData && ridgelineData.network"
+        :ridgelineData="ridgelineData"
+      />
     </div>
   </div>
 </template>
@@ -41,6 +45,7 @@ import WordCloudHeatmap from '@/components/WordCloudHeatmap.vue'
 import CitationNetwork from '@/components/CitationNetwork.vue'
 import DensityVisualization from '@/components/DensityVisualization.vue'
 import ResearchClusterVisualization from '@/components/ResearchClusterVisualization.vue'
+import RidgelinePlot from '@/components/RidgelinePlot.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -48,7 +53,8 @@ const props = defineProps({
   wordCloudData: { type: Array, default: () => [] },
   vosviewerData: { type: Object, default: null },
   densityData: { type: Object, default: null },
-  clusterData: { type: Object, default: null }
+  clusterData: { type: Object, default: null },
+  ridgelineData: { type: Object, default: null }
 })
 const emit = defineEmits(['back-to-pdf'])
 </script>
